@@ -54,7 +54,10 @@ class SupabaseStorageService
                 ];
             }
 
-            if ($response->status() === 404) {
+            $isNotFound = $response->status() === 404 || 
+                ($response->status() === 400 && str_contains($response->body(), 'Bucket not found'));
+
+            if ($isNotFound) {
                 // Bucket doesn't exist, try to create it
                 $createResponse = Http::withHeaders([
                     'Authorization' => "Bearer {$key}",
@@ -75,7 +78,7 @@ class SupabaseStorageService
 
                 return [
                     'success' => false,
-                    'message' => "Koneksi berhasil ke Supabase, namun bucket '{$bucket}' tidak ditemukan dan gagal dibuat. Buat bucket tersebut secara manual di Supabase Dashboard.",
+                    'message' => "Koneksi berhasil ke Supabase, namun bucket '{$bucket}' tidak ditemukan dan gagal dibuat. Detail: " . $createResponse->body() . " (Anda bisa membuat bucket tersebut secara manual dengan nama '{$bucket}' di Supabase Dashboard → Storage)",
                 ];
             }
 
