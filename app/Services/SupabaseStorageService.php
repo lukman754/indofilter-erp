@@ -106,7 +106,18 @@ class SupabaseStorageService
     public function uploadDocument(string $filePath, string $fileName, string $documentType, ?int $companyId = null): string
     {
         if (!$this->isEnabled()) {
-            throw new \Exception('Integrasi Supabase Storage belum diaktifkan atau belum dikonfigurasi dengan benar.');
+            $content = file_get_contents($filePath);
+            if ($content === false) {
+                throw new \Exception('Gagal membaca file lokal untuk diupload.');
+            }
+
+            // Folder path: company_id/document_type/filename
+            $folder    = ($companyId ? "company_{$companyId}" : 'global') . "/{$documentType}";
+            $objectPath = "documents/{$folder}/{$fileName}";
+
+            \Illuminate\Support\Facades\Storage::disk('public')->put($objectPath, $content);
+
+            return asset("storage/{$objectPath}");
         }
 
         $content = file_get_contents($filePath);
@@ -193,6 +204,17 @@ class SupabaseStorageService
     public function deleteFile(string $fileUrl): bool
     {
         if (!$this->isEnabled()) {
+            try {
+                $pos = strpos($fileUrl, '/storage/');
+                if ($pos !== false) {
+                    $path = substr($fileUrl, $pos + strlen('/storage/'));
+                    if (\Illuminate\Support\Facades\Storage::disk('public')->exists($path)) {
+                        return \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error("Failed to delete local file: " . $e->getMessage());
+            }
             return false;
         }
 

@@ -456,9 +456,7 @@ class DocumentController extends Controller
             $storageService = new SupabaseStorageService();
         }
 
-        if (!$storageService->isEnabled()) {
-            return response()->json(['message' => 'Integrasi Supabase Storage belum diaktifkan atau dikonfigurasi.'], 400);
-        }
+        // Local storage fallback is automatic if Supabase is not enabled.
 
         $templatePath = base_path("templates/{$document->type}.docx");
 
@@ -591,16 +589,20 @@ class DocumentController extends Controller
                 $storageService->deleteFile($oldFileUrl);
             }
 
+            $isSupabase = $storageService->isEnabled();
             return response()->json([
                 'success'        => true,
-                'message'        => 'Dokumen berhasil disinkronkan ke Supabase Storage.',
-                'cloud_file_url' => $fileUrl
+                'message'        => $isSupabase ? 'Dokumen berhasil disinkronkan ke Supabase Storage.' : 'Dokumen berhasil disinkronkan ke Penyimpanan Lokal.',
+                'cloud_file_url' => $fileUrl,
+                'storage_type'   => $isSupabase ? 'supabase' : 'local'
             ]);
 
         } catch (\Exception $e) {
+            $isSupabase = $storageService->isEnabled();
+            $storageLabel = $isSupabase ? 'Supabase Storage' : 'Penyimpanan Lokal';
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal sinkronisasi Supabase Storage: ' . $e->getMessage()
+                'message' => "Gagal sinkronisasi {$storageLabel}: " . $e->getMessage()
             ], 500);
         }
     }

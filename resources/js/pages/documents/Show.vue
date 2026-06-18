@@ -94,10 +94,10 @@ async function handleSyncStorage() {
     try {
         const res = await api.syncStorage(route.params.id)
         if (res.data?.success) {
-            alert('Berhasil disinkronkan ke Supabase Storage!')
+            alert(res.data.message || 'Berhasil disinkronkan!')
             await loadDocument()
         } else {
-            alert(res.data?.message || 'Gagal sinkron ke Supabase Storage')
+            alert(res.data?.message || 'Gagal sinkronisasi')
         }
     } catch (e) {
         alert('Gagal sinkron: ' + (e.response?.data?.message || 'Unknown error'))
@@ -162,28 +162,36 @@ onMounted(loadDocument)
                 </div>
             </div>
 
-            <!-- Supabase Storage Status Panel -->
-            <div v-if="doc.supabase_enabled" class="mb-6">
-                <div v-if="doc.cloud_file_url" class="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+            <!-- Storage Status Panel (Supabase or Local Fallback) -->
+            <div v-if="doc.status === 'confirmed' || doc.cloud_file_url" class="mb-6">
+                <!-- If file is synced -->
+                <div v-if="doc.cloud_file_url" :class="doc.supabase_enabled ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-indigo-50 border-indigo-200 text-indigo-800'" class="border rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded bg-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                        <div :class="doc.supabase_enabled ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'" class="w-10 h-10 rounded flex items-center justify-center flex-shrink-0">
+                            <svg v-if="doc.supabase_enabled" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
+                            </svg>
+                            <svg v-else class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
                             </svg>
                         </div>
                         <div>
-                            <h4 class="text-sm font-semibold text-emerald-800">Tersimpan di Supabase Storage</h4>
-                            <p class="text-xs text-emerald-600 mt-0.5">Dokumen ini telah berhasil diupload ke cloud storage.</p>
+                            <h4 class="text-sm font-semibold" :class="doc.supabase_enabled ? 'text-emerald-800' : 'text-indigo-800'">
+                                Tersimpan di {{ doc.supabase_enabled ? 'Supabase Storage' : 'Penyimpanan Lokal' }}
+                            </h4>
+                            <p class="text-xs mt-0.5" :class="doc.supabase_enabled ? 'text-emerald-600' : 'text-indigo-600'">
+                                Dokumen ini telah berhasil disinkronkan ke {{ doc.supabase_enabled ? 'cloud storage' : 'server lokal' }}.
+                            </p>
                         </div>
                     </div>
                     <div class="flex gap-2 flex-wrap">
-                        <a :href="doc.cloud_file_url" target="_blank" class="px-3 py-1.5 text-xs bg-emerald-600 text-white font-medium rounded hover:bg-emerald-700 transition-colors flex items-center gap-1 shadow-sm">
+                        <a :href="doc.cloud_file_url" target="_blank" :class="doc.supabase_enabled ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'" class="px-3 py-1.5 text-xs text-white font-medium rounded transition-colors flex items-center gap-1 shadow-sm">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
                             </svg>
                             Unduh / Buka File
                         </a>
-                        <button @click="handleSyncStorage" :disabled="syncStorageLoading" class="px-3 py-1.5 text-xs bg-white text-emerald-700 border border-emerald-300 font-medium rounded hover:bg-emerald-50 transition-colors flex items-center gap-1 disabled:opacity-50">
+                        <button @click="handleSyncStorage" :disabled="syncStorageLoading" :class="doc.supabase_enabled ? 'text-emerald-700 border-emerald-300 hover:bg-emerald-50' : 'text-indigo-700 border-indigo-300 hover:bg-indigo-50'" class="px-3 py-1.5 text-xs bg-white border font-medium rounded transition-colors flex items-center gap-1 disabled:opacity-50">
                             <svg v-if="syncStorageLoading" class="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -191,31 +199,35 @@ onMounted(loadDocument)
                             <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17.5M10.5 8h.5v4"></path>
                             </svg>
-                            Upload Ulang
+                            Sinkron Ulang
                         </button>
                     </div>
                 </div>
-                <div v-else-if="doc.status === 'confirmed'" class="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+
+                <!-- If file is not synced yet -->
+                <div v-else class="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 flex-shrink-0">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path>
                             </svg>
                         </div>
                         <div>
-                            <h4 class="text-sm font-semibold text-gray-700">Belum diupload ke Supabase Storage</h4>
-                            <p class="text-xs text-gray-500 mt-0.5">Dokumen ini siap diupload ke cloud storage.</p>
+                            <h4 class="text-sm font-semibold text-gray-700">Belum disinkronkan</h4>
+                            <p class="text-xs text-gray-500 mt-0.5">
+                                Dokumen ini siap disinkronkan ke {{ doc.supabase_enabled ? 'Supabase Storage' : 'Penyimpanan Lokal' }}.
+                            </p>
                         </div>
                     </div>
-                    <button @click="handleSyncStorage" :disabled="syncStorageLoading" class="px-4 py-2 text-xs bg-emerald-600 text-white font-medium rounded hover:bg-emerald-700 transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50">
+                    <button @click="handleSyncStorage" :disabled="syncStorageLoading" :class="doc.supabase_enabled ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'" class="px-4 py-2 text-xs text-white font-medium rounded transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50">
                         <svg v-if="syncStorageLoading" class="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                         <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                         </svg>
-                        Upload ke Storage
+                        Sinkronkan Dokumen
                     </button>
                 </div>
             </div>

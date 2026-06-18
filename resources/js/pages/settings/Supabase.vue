@@ -127,6 +127,16 @@ onMounted(() => {
             <div v-if="error" class="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3 mb-4">{{ error }}</div>
             <div v-if="success" class="bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3 mb-4">{{ success }}</div>
 
+            <!-- Local Fallback Info Banner -->
+            <div v-if="form.supabase_enabled === '0'" class="bg-indigo-50 border border-indigo-200 text-indigo-700 text-sm rounded-lg px-4 py-3 mb-4 flex items-start gap-2.5 shadow-sm">
+                <svg class="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="text-xs leading-relaxed">
+                    <span class="font-semibold text-indigo-800">Penyimpanan Lokal Aktif:</span> Karena integrasi Supabase dinonaktifkan (atau jika layanan Supabase sedang bermasalah), dokumen Word akan secara otomatis disimpan di server lokal aplikasi Anda. Anda tetap dapat melakukan sinkronisasi dan mengunduh dokumen dengan lancar!
+                </div>
+            </div>
+
             <!-- Test Result -->
             <div v-if="testResult" class="px-4 py-3 rounded-lg text-sm border mb-4"
                 :class="testResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'">
