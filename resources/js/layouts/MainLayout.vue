@@ -1,9 +1,81 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import Sidebar from '../components/Sidebar.vue'
 import Navbar from '../components/Navbar.vue'
+import GlobalSearchModal from '../components/GlobalSearchModal.vue'
 
+const route = useRoute()
+const router = useRouter()
 const mobileSidebarOpen = ref(false)
+const showSearch = ref(false)
+
+const isActive = (path) => {
+    if (path === '/documents') {
+        return route.path === '/documents' && !route.query.type
+    }
+    if (path.includes('?')) {
+        const [basePath, queryString] = path.split('?')
+        if (!route.path.startsWith('/documents')) return false
+        const params = new URLSearchParams(queryString)
+        for (const [key, val] of params.entries()) {
+            if (decodeURIComponent(route.query[key] || '') !== decodeURIComponent(val || '')) return false
+        }
+        return true
+    }
+    return route.path === path || route.path.startsWith(path + '/')
+}
+
+const sidebarPaths = [
+    '/dashboard',
+    '/documents',
+    '/documents?type=Quotation',
+    '/documents?type=Proforma%20Invoice',
+    '/documents?type=Invoice',
+    '/documents?type=Delivery%20Slip',
+    '/documents?type=Delivery%20Address',
+    '/documents?type=Purchase%20Order',
+    '/companies',
+    '/partners',
+    '/products',
+    '/settings'
+]
+
+const handleGlobalKeydown = (e) => {
+    // 1. CTRL + K: toggle global search modal
+    if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        showSearch.value = !showSearch.value
+        return
+    }
+
+    // Don't intercept other shortcuts if the global search modal is open
+    if (showSearch.value) return
+
+    // 2. CTRL + ArrowUp / ArrowDown: navigasi sidebar
+    if (e.ctrlKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault()
+        const activeIndex = sidebarPaths.findIndex(path => isActive(path))
+        let nextIndex = 0
+        if (activeIndex !== -1) {
+            if (e.key === 'ArrowDown') {
+                nextIndex = (activeIndex + 1) % sidebarPaths.length
+            } else {
+                nextIndex = (activeIndex - 1 + sidebarPaths.length) % sidebarPaths.length
+            }
+        }
+        router.push(sidebarPaths[nextIndex])
+        return
+    }
+}
+
+onMounted(() => {
+    window.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleGlobalKeydown)
+})
 </script>
 
 <template>
@@ -27,11 +99,14 @@ const mobileSidebarOpen = ref(false)
 
         <!-- Main Content -->
         <div class="flex-1 flex flex-col overflow-hidden">
-            <Navbar @toggle-sidebar="mobileSidebarOpen = !mobileSidebarOpen" />
+            <Navbar @toggle-sidebar="mobileSidebarOpen = !mobileSidebarOpen" @open-search="showSearch = true" />
             <main class="flex-1 overflow-y-auto p-4 md:p-6 bg-odoo-gray-bg">
                 <router-view />
             </main>
         </div>
+
+        <!-- Global Search Modal -->
+        <GlobalSearchModal :show="showSearch" @close="showSearch = false" />
     </div>
 </template>
 

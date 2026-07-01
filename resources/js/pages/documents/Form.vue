@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
     documents as api,
@@ -22,9 +22,27 @@ const partnersList = ref([]);
 const companiesList = ref([]);
 const productsList = ref([]);
 const documentsList = ref([]);
+
+const isOpenPartnerModal = ref(false);
+const isSavingPartner = ref(false);
+const partnerForm = ref({
+    name: "",
+    alias: "",
+    type: "customer",
+    address: "",
+    phone: "",
+    email: "",
+    npwp: "",
+    contact_person: "",
+    company_id: "",
+});
 const selectedRefDocumentId = ref("");
 const refSearch = ref("");
 const isOpenRefDropdown = ref(false);
+
+const parsingPdf = ref(false);
+const uploadedPdfName = ref("");
+const pdfFileInput = ref(null);
 
 const filteredRefDocuments = computed(() => {
     const q = refSearch.value.toLowerCase().trim();
@@ -179,6 +197,59 @@ function handleNumberInput() {
         isNumberManuallyEdited.value = true;
     }
 }
+
+const handlePdfUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    uploadedPdfName.value = file.name;
+    parsingPdf.value = true;
+    error.value = "";
+
+    const formData = new FormData();
+    formData.append("pdf", file);
+
+    try {
+        const res = await api.parsePdf(formData);
+        if (res.data && res.data.success) {
+            const data = res.data.data;
+            
+            if (data.partner_id) {
+                form.value.partner_id = data.partner_id;
+            } else if (data.partner_name) {
+                alert(`Partner "${data.partner_name}" tidak ditemukan di database. Silakan pilih partner secara manual.`);
+            }
+            
+            if (data.document_number) form.value.number = data.document_number;
+            if (data.date) form.value.date = data.date;
+            if (data.due_date) form.value.due_date = data.due_date;
+            if (data.notes) form.value.notes = data.notes;
+            if (data.terms) form.value.terms = data.terms;
+            if (data.discount !== undefined) form.value.discount = data.discount;
+            if (data.is_ppn !== undefined) form.value.is_ppn = data.is_ppn;
+            
+            if (data.items && data.items.length > 0) {
+                form.value.items = data.items.map(item => ({
+                    product_name: item.product_name,
+                    description: item.description || "",
+                    qty: item.qty || 1,
+                    uom: item.uom || "PCS",
+                    unit_price: item.unit_price || 0,
+                    total: (item.qty || 1) * (item.unit_price || 0)
+                }));
+            }
+            
+            alert("PDF berhasil dibaca! Data form telah diisi otomatis.");
+        } else {
+            error.value = res.data.message || "Gagal menganalisis PDF.";
+        }
+    } catch (e) {
+        error.value = e.response?.data?.message || e.message || "Gagal menganalisis PDF.";
+    } finally {
+        parsingPdf.value = false;
+        if (event.target) event.target.value = "";
+    }
+};
 
 watch(
     [
@@ -391,33 +462,66 @@ const companyBankAccounts = computed(() => {
 
 const companyProducts = computed(() => {
     if (!form.value.company_id) return [];
-    return productsList.value.filter((p) => p.company_id === form.value.company_id);
+    return productsList.value.filter(
+        (p) => p.company_id === form.value.company_id,
+    );
 });
 
 function terbilangJS(number) {
     number = Math.abs(Math.round(number));
-    const words = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
+    const words = [
+        "",
+        "satu",
+        "dua",
+        "tiga",
+        "empat",
+        "lima",
+        "enam",
+        "tujuh",
+        "delapan",
+        "sembilan",
+        "sepuluh",
+        "sebelas",
+    ];
     let temp = "";
     if (number < 12) {
         temp = " " + words[number];
     } else if (number < 20) {
         temp = terbilangJS(number - 10) + " belas";
     } else if (number < 100) {
-        temp = terbilangJS(Math.floor(number / 10)) + " puluh" + terbilangJS(number % 10);
+        temp =
+            terbilangJS(Math.floor(number / 10)) +
+            " puluh" +
+            terbilangJS(number % 10);
     } else if (number < 200) {
         temp = " seratus" + terbilangJS(number - 100);
     } else if (number < 1000) {
-        temp = terbilangJS(Math.floor(number / 100)) + " ratus" + terbilangJS(number % 100);
+        temp =
+            terbilangJS(Math.floor(number / 100)) +
+            " ratus" +
+            terbilangJS(number % 100);
     } else if (number < 2000) {
         temp = " seribu" + terbilangJS(number - 1000);
     } else if (number < 1000000) {
-        temp = terbilangJS(Math.floor(number / 1000)) + " ribu" + terbilangJS(number % 1000);
+        temp =
+            terbilangJS(Math.floor(number / 1000)) +
+            " ribu" +
+            terbilangJS(number % 1000);
     } else if (number < 1000000000) {
-        temp = terbilangJS(Math.floor(number / 1000000)) + " juta" + terbilangJS(number % 1000000);
+        temp =
+            terbilangJS(Math.floor(number / 1000000)) +
+            " juta" +
+            terbilangJS(number % 1000000);
     } else if (number < 1000000000000) {
-        temp = terbilangJS(Math.floor(number / 1000000000)) + " milyar" + terbilangJS(number % 1000000000);
+        temp =
+            terbilangJS(Math.floor(number / 1000000000)) +
+            " milyar" +
+            terbilangJS(number % 1000000000);
     } else if (number < 1000000000000000) {
-        temp = terbilangJS(Math.floor(number / 1000000000000)) + " trilyun" + terbilangJS(number % 1000000000000);
+        temp =
+            terbilangJS(Math.floor(number / 1000000000000)) +
+            " trilyun" +
+            terbilangJS(number % 1000000000000);
     }
     return temp;
 }
@@ -425,13 +529,15 @@ function terbilangJS(number) {
 function spellNumber(number) {
     if (!number || number === 0) return "Nol Rupiah";
     const spelled = terbilangJS(number).trim();
-    return spelled.replace(/\b\w/g, c => c.toUpperCase()) + " Rupiah";
+    return spelled.replace(/\b\w/g, (c) => c.toUpperCase()) + " Rupiah";
 }
 
 function onProductNameInput(item) {
     if (!form.value.company_id) return;
     const prod = productsList.value.find(
-        (p) => p.company_id === form.value.company_id && p.name === item.product_name
+        (p) =>
+            p.company_id === form.value.company_id &&
+            p.name === item.product_name,
     );
     if (prod) {
         item.description = prod.description || "";
@@ -442,19 +548,64 @@ function onProductNameInput(item) {
 }
 
 async function loadDeps() {
-    const promises = [
-        partnersApi.list(),
-        companiesApi.list(),
-        productsApi.list(),
-        api.list(),
-    ];
+    try {
+        const res = await api.getFormDependencies();
+        const data = res.data;
+        partnersList.value = data.partners || [];
+        companiesList.value = data.companies || [];
+        productsList.value = data.products || [];
+        documentsList.value = data.documents || [];
+    } catch (e) {
+        console.error("Gagal memuat dependencies", e);
+    }
+}
 
-    const results = await Promise.all(promises);
+function openAddPartnerModal() {
+    const isPO = form.value.document_type === "Purchase Order";
+    partnerForm.value = {
+        name: "",
+        alias: "",
+        type: isPO ? "vendor" : "customer",
+        address: "",
+        phone: "",
+        email: "",
+        npwp: "",
+        contact_person: "",
+        company_id: form.value.company_id || "",
+    };
+    isOpenPartnerModal.value = true;
+}
 
-    partnersList.value = results[0].data.data || results[0].data || [];
-    companiesList.value = results[1].data.data || results[1].data || [];
-    productsList.value = results[2].data.data || results[2].data || [];
-    documentsList.value = results[3].data.data || results[3].data || [];
+async function handleSavePartner() {
+    if (!partnerForm.value.name) {
+        alert("Nama partner wajib diisi!");
+        return;
+    }
+    if (!partnerForm.value.company_id) {
+        alert("Perusahaan harus dipilih terlebih dahulu di form utama!");
+        return;
+    }
+    isSavingPartner.value = true;
+    try {
+        const res = await partnersApi.create(partnerForm.value);
+        const newPartner = res.data;
+
+        const partnersRes = await partnersApi.list();
+        partnersList.value = partnersRes.data.data || partnersRes.data || [];
+
+        form.value.partner_id = newPartner.id;
+
+        form.value.recipient_name = newPartner.name || "";
+        form.value.recipient_phone = newPartner.phone || "";
+        form.value.recipient_address = newPartner.address || "";
+        form.value.recipient_pic = newPartner.contact_person || "";
+
+        isOpenPartnerModal.value = false;
+    } catch (e) {
+        alert(e.response?.data?.message || "Gagal menambah partner");
+    } finally {
+        isSavingPartner.value = false;
+    }
 }
 
 async function handleCopyFromDocument() {
@@ -564,7 +715,9 @@ async function loadDocument() {
             recipient_address: doc.recipient_address || "",
             recipient_pic: doc.recipient_pic || "",
             customer_po_number: doc.customer_po_number || "",
-            customer_po_date: doc.customer_po_date ? doc.customer_po_date.split("T")[0] : "",
+            customer_po_date: doc.customer_po_date
+                ? doc.customer_po_date.split("T")[0]
+                : "",
         };
         if (doc.reference) {
             selectedRefDocumentId.value = doc.reference.id;
@@ -588,6 +741,26 @@ async function handleSave(confirm = false) {
     saving.value = true;
     error.value = "";
     try {
+        let overwrite = false;
+        if (confirm && form.value.number) {
+            try {
+                const checkRes = await api.checkLocalFile({ 
+                    number: form.value.number,
+                    company_id: form.value.company_id,
+                    type: form.value.type
+                });
+                if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
+                    if (!window.confirm(`Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
+                        saving.value = false;
+                        return;
+                    }
+                    overwrite = true;
+                }
+            } catch (e) {
+                console.error("Gagal memeriksa berkas lokal", e);
+            }
+        }
+
         const payload = {
             ...form.value,
             status: confirm ? "confirmed" : "draft",
@@ -607,6 +780,7 @@ async function handleSave(confirm = false) {
                     : 0,
             dp_amount: dpAmount.value,
             payment_type: form.value.payment_type,
+            overwrite: overwrite,
             items: form.value.items.map((item) => ({
                 product_name: item.product_name,
                 description: item.description || null,
@@ -678,7 +852,15 @@ watch(
     },
 );
 
+const handleFormKeydown = (e) => {
+    if (e.ctrlKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave(false);
+    }
+};
+
 onMounted(async () => {
+    window.addEventListener("keydown", handleFormKeydown);
     await loadDeps();
     if (isEdit.value) {
         await loadDocument();
@@ -693,6 +875,10 @@ onMounted(async () => {
             Object.assign(form.value, quotationDefaults);
         }
     }
+});
+
+onUnmounted(() => {
+    window.removeEventListener("keydown", handleFormKeydown);
 });
 </script>
 
@@ -723,7 +909,11 @@ onMounted(async () => {
         <template v-if="!loading">
             <div class="flex items-center justify-between mb-6">
                 <h2 class="text-lg font-semibold text-gray-800">
-                    {{ isEdit ? "Edit Dokumen" : "Buat Dokumen Baru" }}
+                    {{
+                        isEdit
+                            ? "Edit " + form.document_type
+                            : "Buat " + form.document_type + " Baru"
+                    }}
                 </h2>
                 <button
                     @click="
@@ -761,6 +951,48 @@ onMounted(async () => {
             <div
                 class="bg-white rounded-lg border border-gray-200 p-6 space-y-6"
             >
+                <!-- Auto-fill AI (PDF) -->
+                <div
+                    v-if="!isEdit"
+                    class="bg-purple-50/40 border border-purple-100 rounded-xl p-4 flex flex-col md:flex-row md:items-start gap-4 mb-4"
+                >
+                    <div class="flex-1">
+                        <label class="block text-xs font-bold text-purple-800 mb-1">
+                            Auto-fill Form dengan AI (Upload PDF)
+                        </label>
+                        <div class="flex items-center gap-2 mt-2">
+                            <input
+                                type="file"
+                                ref="pdfFileInput"
+                                @change="handlePdfUpload"
+                                accept="application/pdf"
+                                class="hidden"
+                            />
+                            <button
+                                type="button"
+                                @click="pdfFileInput.click()"
+                                :disabled="parsingPdf"
+                                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                            >
+                                <svg v-if="parsingPdf" class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                </svg>
+                                {{ parsingPdf ? "Membaca PDF..." : "Pilih File PDF Penawaran / Invoice" }}
+                            </button>
+                            <span v-if="uploadedPdfName" class="text-xs text-gray-600 font-semibold truncate max-w-xs bg-purple-100/60 px-2.5 py-1 rounded-md">
+                                {{ uploadedPdfName }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="text-xs text-purple-700 md:max-w-sm md:mt-2">
+                        Punya file PDF penawaran/invoice sebelumnya? Unggah di sini dan AI akan otomatis membaca, mengekstrak tabel barang, harga, tanggal, nomor dokumen, dll. untuk mengisi form ini secara instan!
+                    </div>
+                </div>
+
                 <!-- Referensi Dokumen -->
                 <div
                     class="bg-blue-50/40 border border-blue-100 rounded-xl p-4 flex flex-col md:flex-row md:items-start gap-4"
@@ -898,29 +1130,6 @@ onMounted(async () => {
                         <div
                             class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
                         >
-                            <label for="doc-type" class="mb-0"
-                                >Tipe Dokumen *</label
-                            >
-                            <div class="col-span-2">
-                                <select
-                                    v-model="form.document_type"
-                                    :disabled="isEdit"
-                                    class="w-full outline-none"
-                                    id="doc-type"
-                                >
-                                    <option
-                                        v-for="t in documentTypes"
-                                        :key="t"
-                                        :value="t"
-                                    >
-                                        {{ t }}
-                                    </option>
-                                </select>
-                            </div>
-                        </div>
-                        <div
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
                             <label for="company" class="mb-0">Perusahaan</label>
                             <div class="col-span-2">
                                 <select
@@ -944,10 +1153,10 @@ onMounted(async () => {
                             class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
                         >
                             <label for="partner" class="mb-0">Partner *</label>
-                            <div class="col-span-2">
+                            <div class="col-span-2 flex gap-2">
                                 <select
                                     v-model="form.partner_id"
-                                    class="w-full outline-none"
+                                    class="w-full outline-none flex-1"
                                     id="partner"
                                 >
                                     <option value="">Pilih Partner</option>
@@ -959,6 +1168,27 @@ onMounted(async () => {
                                         {{ p.name }}
                                     </option>
                                 </select>
+                                <button
+                                    type="button"
+                                    @click="openAddPartnerModal"
+                                    class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-xs font-semibold border border-blue-200 transition-colors flex items-center gap-1 shrink-0"
+                                    title="Tambah Partner Baru"
+                                >
+                                    <svg
+                                        class="w-3.5 h-3.5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M12 4v16m8-8H4"
+                                        ></path>
+                                    </svg>
+                                    <span>Tambah</span>
+                                </button>
                             </div>
                         </div>
                         <div
@@ -1013,7 +1243,9 @@ onMounted(async () => {
                             v-if="form.document_type === 'Delivery Slip'"
                             class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
                         >
-                            <label for="po-no" class="mb-0">Nomor PO Customer</label>
+                            <label for="po-no" class="mb-0"
+                                >Nomor PO Customer</label
+                            >
                             <div class="col-span-2">
                                 <input
                                     v-model="form.customer_po_number"
@@ -1041,10 +1273,15 @@ onMounted(async () => {
 
                         <!-- Customer Reff / PO (For Invoice and Proforma Invoice) -->
                         <div
-                            v-if="form.document_type === 'Invoice' || form.document_type === 'Proforma Invoice'"
+                            v-if="
+                                form.document_type === 'Invoice' ||
+                                form.document_type === 'Proforma Invoice'
+                            "
                             class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
                         >
-                            <label for="cust-reff" class="mb-0">Customer Reff</label>
+                            <label for="cust-reff" class="mb-0"
+                                >Customer Reff</label
+                            >
                             <div class="col-span-2">
                                 <input
                                     v-model="form.customer_po_number"
@@ -1358,29 +1595,10 @@ onMounted(async () => {
 
                 <!-- Items -->
                 <div v-if="form.document_type !== 'Delivery Address'">
-                    <div class="flex items-center justify-between mb-3">
+                    <div class="mb-3">
                         <h3 class="text-sm font-semibold text-gray-700">
                             Item Barang
                         </h3>
-                        <button
-                            @click="addItem"
-                            class="text-indofilter hover:text-indofilter-dark text-sm font-medium transition-colors flex items-center gap-1"
-                        >
-                            <svg
-                                class="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M12 4v16m8-8H4"
-                                ></path>
-                            </svg>
-                            Tambah Item
-                        </button>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
@@ -1407,13 +1625,19 @@ onMounted(async () => {
                                         Satuan
                                     </th>
                                     <th
-                                        v-if="form.document_type !== 'Delivery Slip'"
+                                        v-if="
+                                            form.document_type !==
+                                            'Delivery Slip'
+                                        "
                                         class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase"
                                     >
                                         Harga
                                     </th>
                                     <th
-                                        v-if="form.document_type !== 'Delivery Slip'"
+                                        v-if="
+                                            form.document_type !==
+                                            'Delivery Slip'
+                                        "
                                         class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase"
                                     >
                                         Total
@@ -1466,7 +1690,10 @@ onMounted(async () => {
                                         </select>
                                     </td>
                                     <td
-                                        v-if="form.document_type !== 'Delivery Slip'"
+                                        v-if="
+                                            form.document_type !==
+                                            'Delivery Slip'
+                                        "
                                         class="px-1.5 py-1"
                                     >
                                         <input
@@ -1480,7 +1707,10 @@ onMounted(async () => {
                                         />
                                     </td>
                                     <td
-                                        v-if="form.document_type !== 'Delivery Slip'"
+                                        v-if="
+                                            form.document_type !==
+                                            'Delivery Slip'
+                                        "
                                         class="px-1.5 py-1 text-right text-sm font-medium text-gray-700"
                                     >
                                         {{
@@ -1512,11 +1742,51 @@ onMounted(async () => {
                                 </tr>
                                 <tr v-if="form.items.length === 0">
                                     <td
-                                        colspan="7"
+                                        :colspan="
+                                            form.document_type ===
+                                            'Delivery Slip'
+                                                ? 5
+                                                : 7
+                                        "
                                         class="px-3 py-4 text-center text-gray-400 text-sm"
                                     >
-                                        Belum ada item. Klik "Tambah Item" untuk
-                                        menambahkan.
+                                        Belum ada item. Tambahkan item
+                                        menggunakan baris di bawah.
+                                    </td>
+                                </tr>
+                                <!-- Add Item Row (Odoo style) -->
+                                <tr
+                                    class="hover:bg-gray-50/50 transition-colors"
+                                >
+                                    <td
+                                        :colspan="
+                                            form.document_type ===
+                                            'Delivery Slip'
+                                                ? 5
+                                                : 7
+                                        "
+                                        class="px-3 py-2 border-t border-gray-100"
+                                    >
+                                        <button
+                                            type="button"
+                                            @click="addItem"
+                                            class="text-blue-600 hover:text-blue-800 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 py-1"
+                                        >
+                                            <svg
+                                                class="w-3.5 h-3.5"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M12 4v16m8-8H4"
+                                                ></path>
+                                            </svg>
+                                            Tambah Item (Add a line)
+                                        </button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -1526,7 +1796,10 @@ onMounted(async () => {
 
                 <!-- Totals -->
                 <div
-                    v-if="form.document_type !== 'Delivery Address' && form.document_type !== 'Delivery Slip'"
+                    v-if="
+                        form.document_type !== 'Delivery Address' &&
+                        form.document_type !== 'Delivery Slip'
+                    "
                     class="flex justify-end"
                 >
                     <div class="w-72 space-y-2">
@@ -1648,7 +1921,15 @@ onMounted(async () => {
                             >
                         </div>
                         <!-- Terbilang Display -->
-                        <div v-if="(form.document_type === 'Invoice' || form.document_type === 'Proforma Invoice') && grandTotal > 0" class="text-xs text-right text-gray-500 italic mt-1.5 font-medium bg-gray-50 p-2 rounded border border-gray-100">
+                        <div
+                            v-if="
+                                (form.document_type === 'Invoice' ||
+                                    form.document_type ===
+                                        'Proforma Invoice') &&
+                                grandTotal > 0
+                            "
+                            class="text-xs text-right text-gray-500 italic mt-1.5 font-medium bg-gray-50 p-2 rounded border border-gray-100"
+                        >
                             Terbilang: {{ spellNumber(grandTotal) }}
                         </div>
                     </div>
@@ -1727,9 +2008,210 @@ onMounted(async () => {
         </template>
 
         <datalist id="company-products">
-            <option v-for="prod in companyProducts" :key="prod.id" :value="prod.name">
-                {{ prod.code ? `[${prod.code}] ` : '' }}{{ prod.description ? ` - ${prod.description}` : '' }}
+            <option
+                v-for="prod in companyProducts"
+                :key="prod.id"
+                :value="prod.name"
+            >
+                {{ prod.code ? `[${prod.code}] ` : ""
+                }}{{ prod.description ? ` - ${prod.description}` : "" }}
             </option>
         </datalist>
+
+        <!-- Add Partner Modal -->
+        <div
+            v-if="isOpenPartnerModal"
+            class="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        >
+            <div
+                class="bg-white rounded-2xl max-w-lg w-full border border-gray-150 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
+            >
+                <!-- Modal Header -->
+                <div
+                    class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
+                >
+                    <h3 class="text-base font-bold text-gray-800">
+                        Tambah Partner Baru
+                    </h3>
+                    <button
+                        type="button"
+                        @click="isOpenPartnerModal = false"
+                        class="text-gray-400 hover:text-gray-650 transition-colors"
+                    >
+                        <svg
+                            class="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"
+                            ></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Modal Body -->
+                <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <!-- Type Selector -->
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-gray-650 mb-1"
+                            >Tipe Partner</label
+                        >
+                        <select
+                            v-model="partnerForm.type"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        >
+                            <option value="customer">Customer</option>
+                            <option value="vendor">Vendor</option>
+                        </select>
+                    </div>
+
+                    <!-- Name -->
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-gray-650 mb-1"
+                            >Nama Partner / Perusahaan *</label
+                        >
+                        <input
+                            v-model="partnerForm.name"
+                            type="text"
+                            placeholder="Nama Lengkap / Nama PT"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            required
+                        />
+                    </div>
+
+                    <!-- Alias -->
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-gray-650 mb-1"
+                            >Alias (Singkatan)</label
+                        >
+                        <input
+                            v-model="partnerForm.alias"
+                            type="text"
+                            placeholder="Contoh: Maju Jaya"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                    </div>
+
+                    <!-- Address -->
+                    <div>
+                        <label
+                            class="block text-xs font-semibold text-gray-650 mb-1"
+                            >Alamat Lengkap</label
+                        >
+                        <textarea
+                            v-model="partnerForm.address"
+                            rows="3"
+                            placeholder="Alamat pengiriman / penagihan"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        ></textarea>
+                    </div>
+
+                    <!-- Phone and Contact Person (Parallel) -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label
+                                class="block text-xs font-semibold text-gray-650 mb-1"
+                                >No. HP / Telepon</label
+                            >
+                            <input
+                                v-model="partnerForm.phone"
+                                type="text"
+                                placeholder="No. Telepon"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label
+                                class="block text-xs font-semibold text-gray-650 mb-1"
+                                >Kontak Person (PIC)</label
+                            >
+                            <input
+                                v-model="partnerForm.contact_person"
+                                type="text"
+                                placeholder="Nama PIC"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Email and NPWP (Parallel - Rarely used) -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label
+                                class="block text-xs font-semibold text-gray-650 mb-1"
+                                >Email</label
+                            >
+                            <input
+                                v-model="partnerForm.email"
+                                type="email"
+                                placeholder="Alamat Email"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label
+                                class="block text-xs font-semibold text-gray-650 mb-1"
+                                >NPWP</label
+                            >
+                            <input
+                                v-model="partnerForm.npwp"
+                                type="text"
+                                placeholder="Nomor NPWP"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div
+                    class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50/50"
+                >
+                    <button
+                        type="button"
+                        @click="isOpenPartnerModal = false"
+                        class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                        Batal
+                    </button>
+                    <button
+                        type="button"
+                        @click="handleSavePartner"
+                        :disabled="isSavingPartner"
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                        <svg
+                            v-if="isSavingPartner"
+                            class="animate-spin h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                        >
+                            <circle
+                                class="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                stroke-width="4"
+                            ></circle>
+                            <path
+                                class="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            ></path>
+                        </svg>
+                        Simpan Partner
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </template>

@@ -3,55 +3,92 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
 use App\Models\Setting;
-use App\Services\SupabaseStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class SettingController extends Controller
 {
-    public function getSupabaseSettings(): JsonResponse
+    public function getSettings(): JsonResponse
     {
+        $companies = Company::where('is_active', true)->get(['id', 'name', 'alias']);
+
+        $documentTypes = [
+            'quotation',
+            'proforma_invoice',
+            'invoice',
+            'delivery_slip',
+            'delivery_address',
+            'purchase_order',
+        ];
+
+        $globalFolders = [];
+        foreach ($documentTypes as $type) {
+            $globalFolders[$type] = Setting::get("local_path_{$type}", '');
+        }
+
+        $companyFolders = [];
+        foreach ($companies as $company) {
+            $companyFolders[$company->id] = [];
+            foreach ($documentTypes as $type) {
+                $companyFolders[$company->id][$type] = Setting::get("local_path_{$type}", '', $company->id);
+            }
+        }
+
         return response()->json([
-            'supabase_enabled'     => Setting::get('supabase_enabled', '0'),
-            'supabase_url'         => Setting::get('supabase_url', ''),
-            'supabase_service_key' => Setting::get('supabase_service_key', ''),
-            'supabase_bucket'      => Setting::get('supabase_bucket', 'documents'),
+            'global_folders' => $globalFolders,
+            'company_folders' => $companyFolders,
+            'companies' => $companies,
+            'documents_storage_path' => Setting::get('documents_storage_path', ''),
+            'gemini_api_key' => Setting::get('gemini_api_key', ''),
+            'gemini_model' => Setting::get('gemini_model', 'gemini-1.5-flash'),
         ]);
     }
 
-    public function updateSupabaseSettings(Request $request): JsonResponse
+    public function updateSettings(Request $request): JsonResponse
     {
         $request->validate([
-            'supabase_enabled'     => 'required|in:0,1',
-            'supabase_url'         => 'nullable|string|url',
-            'supabase_service_key' => 'nullable|string',
-            'supabase_bucket'      => 'nullable|string|max:100',
+            'global_folders' => 'nullable|array',
+            'company_folders' => 'nullable|array',
+            'documents_storage_path' => 'nullable|string',
+            'gemini_api_key' => 'nullable|string',
+            'gemini_model' => 'nullable|string',
         ]);
 
-        Setting::set('supabase_enabled', $request->input('supabase_enabled', '0'));
-        Setting::set('supabase_url', rtrim($request->input('supabase_url', ''), '/'));
-        Setting::set('supabase_service_key', $request->input('supabase_service_key', ''));
-        Setting::set('supabase_bucket', $request->input('supabase_bucket', 'documents'));
+        Setting::set('documents_storage_path', $request->documents_storage_path ?: '');
+        if ($request->has('gemini_api_key')) {
+            Setting::set('gemini_api_key', $request->gemini_api_key ?: '');
+        }
+        if ($request->has('gemini_model')) {
+            Setting::set('gemini_model', $request->gemini_model ?: 'gemini-1.5-flash');
+        }
 
-        return response()->json(['message' => 'Pengaturan Supabase Storage berhasil disimpan.']);
-    }
+        $documentTypes = [
+            'quotation',
+            'proforma_invoice',
+            'invoice',
+            'delivery_slip',
+            'delivery_address',
+            'purchase_order',
+        ];
 
-    public function testSupabaseConnection(Request $request): JsonResponse
-    {
-        $request->validate([
-            'supabase_url'         => 'required|string',
-            'supabase_service_key' => 'required|string',
-            'supabase_bucket'      => 'required|string',
-        ]);
+        if ($request->has('global_folders')) {
+            foreach ($documentTypes as $type) {
+                $val = $request->input("global_folders.{$type}", '');
+                Setting::set("local_path_{$type}", $val ?: '');
+            }
+        }
 
-        $service = new SupabaseStorageService();
-        $result  = $service->testConnection(
-            $request->supabase_url,
-            $request->supabase_service_key,
-            $request->supabase_bucket
-        );
+        if ($request->has('company_folders')) {
+            foreach ($request->input('company_folders') as $companyId => $folders) {
+                foreach ($documentTypes as $type) {
+                    $val = $folders[$type] ?? '';
+                    Setting::set("local_path_{$type}", $val ?: '', (int)$companyId);
+                }
+            }
+        }
 
-        return response()->json($result);
+        return response()->json(['message' => 'Settings updated successfully.']);
     }
 }

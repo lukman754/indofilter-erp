@@ -1,5 +1,6 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { partners as api, companies as companiesApi } from '../../api/index.js'
 import { useAppStore } from '../../stores/app.js'
 import DataTable from '../../components/DataTable.vue'
@@ -182,14 +183,51 @@ async function confirmDelete(id) {
     }
 }
 
-onMounted(fetchData)
+const route = useRoute()
+const searchInput = ref(null)
+
+const handleLocalKeydown = (e) => {
+    if (e.ctrlKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        if (searchInput.value) {
+            searchInput.value.focus()
+            searchInput.value.select()
+        }
+    }
+    if (e.ctrlKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        openCreate()
+    }
+    if (e.ctrlKey && e.key.toLowerCase() === 's') {
+        if (showModal.value) {
+            e.preventDefault()
+            save()
+        }
+    }
+}
+
+onMounted(async () => {
+    window.addEventListener('keydown', handleLocalKeydown)
+    if (route.query.search) {
+        search.value = route.query.search
+    }
+    await fetchData()
+})
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleLocalKeydown)
+})
+
+watch(() => route.query.search, (newVal) => {
+    search.value = newVal || ''
+})
 </script>
 
 <template>
     <div>
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div class="flex flex-wrap items-center gap-3">
-                <input v-model="search" type="text" placeholder="Cari partner..." class="w-56 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                <input ref="searchInput" v-model="search" type="text" placeholder="Cari partner..." class="w-56 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                 <select v-model="filterType" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                     <option value="">Semua Tipe</option>
                     <option value="customer">Customer</option>

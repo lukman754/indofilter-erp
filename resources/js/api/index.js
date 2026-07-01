@@ -76,21 +76,31 @@ export const documents = {
     create: (data) => api.post('/documents', data),
     update: (id, data) => api.put(`/documents/${id}`, data),
     delete: (id) => api.delete(`/documents/${id}`),
-    confirm: (id) => api.post(`/documents/${id}/confirm`),
+    confirm: (id, params) => api.post(`/documents/${id}/confirm`, null, { params }),
     cancel: (id) => api.post(`/documents/${id}/cancel`),
-    export: (id) => api.get(`/documents/${id}/export`, { responseType: 'blob' }),
+    export: (id, params) => api.get(`/documents/${id}/export`, { params }),
     generateNumber: (params) => api.get('/documents/generate-number', { params }),
-    syncStorage: (id) => api.post(`/documents/${id}/sync-storage`),
-}
-
-export const settings = {
-    getSupabase: () => api.get('/settings/supabase'),
-    updateSupabase: (data) => api.post('/settings/supabase', data),
-    testSupabase: (data) => api.post('/settings/supabase/test', data),
+    getFormDependencies: (params) => api.get('/documents/form-dependencies', { params }),
+    checkLocalFile: (params) => api.get('/documents/check-local-file', { params }),
+    parsePdf: (formData) => api.post('/documents/parse-pdf', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data'
+        }
+    }),
 }
 
 export const dashboard = {
     stats: () => api.get('/dashboard/stats'),
 }
 
+export const settings = {
+    getGoogleDrive: () => api.get('/settings'),
+    updateGoogleDrive: (data) => api.post('/settings', data),
+}
+
+export const search = {
+    globalSearch: (q) => api.get('/global-search', { params: { q } }),
+}
+
 export default api
+

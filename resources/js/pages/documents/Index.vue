@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { documents as api } from '../../api/index.js'
 import DataTable from '../../components/DataTable.vue'
@@ -99,8 +99,23 @@ watch(() => route.query.type, (newVal) => {
 
 async function handleConfirm(id) {
     if (!confirm('Konfirmasi dokumen ini?')) return
+    const doc = documents.value.find(d => d.id === id)
+    let overwrite = false
+    if (doc && doc.document_number) {
+        try {
+            const checkRes = await api.checkLocalFile({ number: doc.document_number })
+            if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
+                if (!window.confirm(`Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
+                    return
+                }
+                overwrite = true
+            }
+        } catch (e) {
+            console.error("Gagal memeriksa berkas lokal", e)
+        }
+    }
     try {
-        await api.confirm(id)
+        await api.confirm(id, { overwrite })
         await fetchData()
     } catch (e) {
         alert('Gagal mengkonfirmasi dokumen')
@@ -129,34 +144,69 @@ async function handleDelete(id) {
 
 async function handleExport(id) {
     try {
-        const doc = items.value.find(item => item.id === id)
-        const filename = doc && doc.number ? `${doc.number.replace(/[\/\\]/g, '-')}.docx` : `dokumen-${id}.docx`
-        const res = await api.export(id)
-        const url = window.URL.createObjectURL(new Blob([res.data]))
-        const link = document.createElement('a')
-        link.href = url
-        link.setAttribute('download', filename)
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-        window.URL.revokeObjectURL(url)
+        let overwrite = false;
+        let res = await api.export(id, { overwrite: false });
+        
+        if (res.data && res.data.exists) {
+            if (window.confirm(`Berkas "${res.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
+                res = await api.export(id, { overwrite: true });
+            } else {
+                return;
+            }
+        }
+        
+        if (res.data && res.data.success) {
+            alert(res.data.message);
+        } else {
+            alert(res.data.message || 'Gagal mengekspor dokumen');
+        }
     } catch (e) {
-        alert('Gagal mengexport dokumen')
+        alert(e.response?.data?.message || 'Gagal mengekspor dokumen');
     }
 }
 
-onMounted(fetchData)
+const searchInput = ref(null)
+
+const handleIndexKeydown = (e) => {
+    if (e.ctrlKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        if (searchInput.value) {
+            searchInput.value.focus()
+            searchInput.value.select()
+        }
+    }
+    if (e.ctrlKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        router.push({ path: '/documents/create', query: { type: activeType.value || 'Quotation' } })
+    }
+}
+
+onMounted(async () => {
+    window.addEventListener('keydown', handleIndexKeydown)
+    if (route.query.search) {
+        search.value = route.query.search
+    }
+    await fetchData()
+})
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleIndexKeydown)
+})
+
+watch(() => route.query.search, (newVal) => {
+    search.value = newVal || ''
+})
 </script>
 
 <template>
     <div>
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div class="flex items-center gap-2">
-                <button v-for="t in documentTypes" :key="t.value" @click="activeType = t.value" class="px-3 py-1.5 text-sm rounded-lg transition-colors" :class="activeType === t.value ? 'bg-indofilter text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'">
-                    {{ t.label }}
-                </button>
+            <div>
+                <h1 class="text-lg font-bold text-gray-800">
+                    {{ activeType ? activeType : 'Semua Dokumen' }}
+                </h1>
             </div>
-            <button @click="router.push({ path: '/documents/create', query: { type: activeType } })" class="bg-indofilter hover:bg-indofilter-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+            <button @click="router.push({ path: '/documents/create', query: { type: activeType || 'Quotation' } })" class="bg-indofilter hover:bg-indofilter-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                 </svg>
@@ -165,7 +215,7 @@ onMounted(fetchData)
         </div>
 
         <div class="flex flex-wrap items-center gap-3 mb-4">
-            <input v-model="search" type="text" placeholder="Cari dokumen..." class="w-56 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+            <input ref="searchInput" v-model="search" type="text" placeholder="Cari dokumen..." class="w-56 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
             <select v-model="activeStatus" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                 <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
             </select>

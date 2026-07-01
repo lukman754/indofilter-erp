@@ -62,9 +62,9 @@ const routes = [
                 component: () => import('../pages/documents/Show.vue'),
             },
             {
-                path: 'settings/supabase',
-                name: 'settings.supabase',
-                component: () => import('../pages/settings/Supabase.vue'),
+                path: 'settings',
+                name: 'settings',
+                component: () => import('../pages/settings/GoogleDrive.vue'),
             },
         ],
     },

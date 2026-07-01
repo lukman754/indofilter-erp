@@ -79,7 +79,7 @@ class TemplateGenerator
         $left = [ [$numberLabel, '${doc_number}'], ['Tanggal', '${doc_date}'] ];
         if ($showDueDate) { $left[] = ['Jatuh Tempo', '${doc_due_date}']; }
 
-        $right = [ ['Kepada', '${partner_name}'], ['Alamat', '${partner_address}'], ['Up.', '${partner_contact}'] ];
+        $right = [ ['Kepada', '${partner_name}'], ['Alamat', '${partner_address}'], ['Up.', '${partner_contact}'], ['Telp.', '${partner_phone}'] ];
         if ($showPartnerNpwp) { $right[] = ['NPWP', '${partner_npwp}']; }
 
         $row = $table->addRow();
@@ -172,7 +172,8 @@ class TemplateGenerator
         $cr->addText('SYARAT DAN KETENTUAN', 'fLabel', 'pLeft');
         $cr->addText('${terms}', 'fSmall', 'pAddress');
         $cr->addText(' ', 'fValue', 'pAddress');
-        $cr->addText('Catatan: ${notes}', 'fSmall', 'pAddress');
+        $cr->addText('Catatan:', 'fLabel', 'pLeft');
+        $cr->addText('${notes}', 'fSmall', 'pAddress');
     }
 
     private function addSignature(Section $section, array $rows = [['Hormat Kami', '']]): void
@@ -391,11 +392,23 @@ class TemplateGenerator
         $cl->addText('Metode Kirim: ${shipping_method}', 'fValue', 'pAddress');
         $cl->addText('Tanggal Kirim: ${delivery_date}', 'fValue', 'pAddress');
 
+        $cl->addText(' ', 'fValue');
+        $cl->addText('REKENING PERUSAHAAN (KAMI)', 'fLabel', 'pLeft');
+        $cl->addText('Bank: ${bank_name}', 'fValue', 'pAddress');
+        $cl->addText('Atas Nama: ${bank_account_name}', 'fValue', 'pAddress');
+        $cl->addText('No. Rekening: ${bank_account_number}', 'fValue', 'pAddress');
+
         $cr = $poRow->addCell(Converter::cmToTwip(8.5));
-        $cr->addText('SYARAT PEMBAYARAN', 'fLabel', 'pLeft');
-        $cr->addText('${terms}', 'fValue', 'pAddress');
+        $cr->addText('REKENING VENDOR (TUJUAN)', 'fLabel', 'pLeft');
+        $cr->addText('Bank: ${vendor_bank_name}', 'fValue', 'pAddress');
+        $cr->addText('Atas Nama: ${vendor_bank_account_name}', 'fValue', 'pAddress');
+        $cr->addText('No. Rekening: ${vendor_bank_account_number}', 'fValue', 'pAddress');
+
         $cr->addText(' ', 'fValue');
-        $cr->addText('Catatan: ${notes}', 'fSmall', 'pAddress');
+        $cr->addText('SYARAT DAN KETENTUAN', 'fLabel', 'pLeft');
+        $cr->addText('${terms}', 'fValue', 'pAddress');
+        $cr->addText('Catatan:', 'fLabel', 'pLeft');
+        $cr->addText('${notes}', 'fSmall', 'pAddress');
 
         $section->addText(' ');
         $section->addLine(['weight' => 1, 'color' => $this->styles['blue'], 'spaceBefore' => 400]);
@@ -420,6 +433,14 @@ class TemplateGenerator
         $objWriter = IOFactory::createWriter($this->phpWord, 'Word2007');
         $objWriter->save($path);
         echo "  [OK] $filename\n";
+
+        // Also save for prefixes (ifs and af)
+        foreach (['ifs_', 'af_'] as $prefix) {
+            $prefixedPath = __DIR__ . '/templates/' . $prefix . $filename;
+            copy($path, $prefixedPath);
+            echo "  [OK] " . $prefix . $filename . " (copied)\n";
+        }
+
         $this->phpWord = new PhpWord();
         $this->setupStyles();
     }

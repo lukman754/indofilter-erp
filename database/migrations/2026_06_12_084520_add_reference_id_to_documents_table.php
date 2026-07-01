@@ -12,7 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('documents', function (Blueprint $table) {
-            $table->foreignId('reference_id')->nullable()->constrained('documents')->nullOnDelete();
+            if (\Illuminate\Support\Facades\DB::connection($this->getConnection())->getDriverName() === 'sqlite') {
+                $table->unsignedBigInteger('reference_id')->nullable();
+            } else {
+                $table->foreignId('reference_id')->nullable()->constrained('documents')->nullOnDelete();
+            }
         });
     }
 
@@ -22,7 +26,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('documents', function (Blueprint $table) {
-            $table->dropForeign(['reference_id']);
+            if (\Illuminate\Support\Facades\DB::connection($this->getConnection())->getDriverName() !== 'sqlite') {
+                $table->dropForeign(['reference_id']);
+            }
             $table->dropColumn('reference_id');
         });
     }

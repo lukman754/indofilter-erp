@@ -149,14 +149,16 @@ Setiap template menggunakan **PHPWord Template Processor** dengan placeholder `{
 
 ## 8. Template Documents (6 files)
 
+Setiap dokumen di atas dapat dikustomisasi per-perusahaan dengan menambahkan prefiks alias perusahaan yang di-lowercase (contoh: `ifs_quotation.docx`, `af_quotation.docx`). Jika berkas spesifik perusahaan tidak ditemukan, sistem akan otomatis menggunakan template default.
+
 | File | Deskripsi |
 |------|-----------|
-| `templates/quotation.docx` | Surat Penawaran Harga |
-| `templates/proforma_invoice.docx` | Proforma Invoice (PI) |
-| `templates/invoice.docx` | Invoice / Faktur Pajak |
-| `templates/delivery_slip.docx` | Surat Jalan |
-| `templates/delivery_address.docx` | Alamat Pengiriman (seperti Resi) |
-| `templates/purchase_order.docx` | Purchase Order (PO ke Vendor) |
+| `templates/quotation.docx` | Surat Penawaran Harga (Default) |
+| `templates/proforma_invoice.docx` | Proforma Invoice (PI) (Default) |
+| `templates/invoice.docx` | Invoice / Faktur Pajak (Default) |
+| `templates/delivery_slip.docx` | Surat Jalan (Default) |
+| `templates/delivery_address.docx` | Alamat Pengiriman (seperti Resi) (Default) |
+| `templates/purchase_order.docx` | Purchase Order (PO ke Vendor) (Default) |
 
 ## 9. Tech Stack
 
