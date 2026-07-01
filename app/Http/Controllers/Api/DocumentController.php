@@ -959,6 +959,7 @@ class DocumentController extends Controller
             'uom' => $item['uom'] ?? 'PCS',
             'price' => $item['unit_price'] ?? 0,
             'is_active' => true,
+            'variations' => $item['variations'] ?? null,
         ];
 
         if ($product) {

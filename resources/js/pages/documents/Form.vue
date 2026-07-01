@@ -603,7 +603,16 @@ function onProductNameInput(item) {
         item.description = prod.description || "";
         item.uom = prod.uom || "PCS";
         item.unit_price = prod.price || 0;
-        calcItem(item);
+        
+        if (prod.variations && prod.variations.length > 0) {
+            item.variations = JSON.parse(JSON.stringify(prod.variations));
+            item.has_variations = true;
+            recalcParentFromVariations(item);
+        } else {
+            item.variations = [];
+            item.has_variations = false;
+            calcItem(item);
+        }
     }
 }
 

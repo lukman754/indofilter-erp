@@ -19,6 +19,11 @@ class Product extends Model
         'uom',
         'price',
         'is_active',
+        'variations',
+    ];
+
+    protected $casts = [
+        'variations' => 'array',
     ];
 
     protected $appends = ['document_items'];
