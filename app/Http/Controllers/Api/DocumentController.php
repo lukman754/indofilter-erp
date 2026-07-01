@@ -559,11 +559,12 @@ class DocumentController extends Controller
             $templateProcessor->setValue("product_name#{$row}", $item->product_name ?? '');
             $templateProcessor->setValue("uom#{$row}", $item->uom ?? '');
 
+            $isPO = $document->type === 'purchase_order';
             $hasDescriptionPlaceholder = in_array("description#{$row}", $templateProcessor->getVariables());
 
             $variations = $item->variations;
             if (!empty($variations) && is_array($variations)) {
-                if ($hasDescriptionPlaceholder) {
+                if ($hasDescriptionPlaceholder && !$isPO) {
                     // Template has description column: Keep product_name clean, put variations in description
                     $desc = trim($item->description ?? '');
                     $descLines = empty($desc) ? [] : explode("\n", str_replace("\r", "", $desc));
@@ -577,12 +578,12 @@ class DocumentController extends Controller
                     $this->setMultilineValue($templateProcessor, "description#{$row}", implode("\n", $descWithVariations));
                     $templateProcessor->setValue("product_name#{$row}", $item->product_name ?? '');
                 } else {
-                    // Template does NOT have description column (e.g. PO): Merge product_name, description, and variations!
+                    // PO (or template where description is in same cell): Merge into product_name and clear description
                     $parentLines = [];
                     $parentLines[] = trim($item->product_name ?? '');
                     
-                    // Estimate if parent product name wraps (if > 35 chars, it takes 2 lines)
-                    $wrappedLinesCount = (int) ceil(strlen($item->product_name ?? '') / 35);
+                    // Estimate product name wrapping: 30 chars per line for PO column
+                    $wrappedLinesCount = (int) ceil(strlen($item->product_name ?? '') / 30);
                     $paddingCount = max(1, $wrappedLinesCount);
 
                     if (!empty(trim($item->description ?? ''))) {
@@ -597,6 +598,9 @@ class DocumentController extends Controller
                     }
 
                     $this->setMultilineValue($templateProcessor, "product_name#{$row}", implode("\n", $parentLines));
+                    if ($hasDescriptionPlaceholder) {
+                        $templateProcessor->setValue("description#{$row}", '');
+                    }
                 }
 
                 // Build lines for Unit Price
@@ -619,20 +623,30 @@ class DocumentController extends Controller
                     $totalLines[] = $this->formatRupiah($v['total']);
                 }
                 $this->setMultilineValue($templateProcessor, "total#{$row}", implode("\n", $totalLines));
+
+                // Build lines for UOM (Unit) - Print UOM for each variation!
+                $uomLines = array_fill(0, $paddingCount, '');
+                foreach ($variations as $v) {
+                    $uomLines[] = $item->uom ?? 'PCS';
+                }
+                $this->setMultilineValue($templateProcessor, "uom#{$row}", implode("\n", $uomLines));
             } else {
                 // Standard single item
-                if ($hasDescriptionPlaceholder) {
+                if ($hasDescriptionPlaceholder && !$isPO) {
                     $this->setMultilineValue($templateProcessor, "description#{$row}", $item->description ?? '');
                     $templateProcessor->setValue("product_name#{$row}", $item->product_name ?? '');
                 } else {
-                    // Combine name and description if description exists
                     $combinedName = $item->product_name ?? '';
                     if (!empty(trim($item->description ?? ''))) {
                         $combinedName .= "\n" . trim($item->description);
                     }
                     $this->setMultilineValue($templateProcessor, "product_name#{$row}", $combinedName);
+                    if ($hasDescriptionPlaceholder) {
+                        $templateProcessor->setValue("description#{$row}", '');
+                    }
                 }
                 $templateProcessor->setValue("qty#{$row}", $this->formatQty($item->qty));
+                $templateProcessor->setValue("uom#{$row}", $item->uom ?? '');
                 $templateProcessor->setValue("unit_price#{$row}", $this->formatRupiah($item->unit_price));
                 $templateProcessor->setValue("total#{$row}", $this->formatRupiah($item->total));
             }
