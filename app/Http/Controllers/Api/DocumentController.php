@@ -530,11 +530,11 @@ class DocumentController extends Controller
         $this->setMultilineValue($templateProcessor, 'notes', $document->notes);
         $templateProcessor->setValue('customer_po_number', $document->customer_po_number ?? '');
         $templateProcessor->setValue('customer_po_date', $this->formatIndonesianDate($document->customer_po_date));
-        $templateProcessor->setValue('stock_conditions', $document->stock_conditions ?? '');
-        $templateProcessor->setValue('term_of_payment', $document->term_of_payment ?? '');
-        $templateProcessor->setValue('price_conditions', $document->price_conditions ?? '');
-        $templateProcessor->setValue('standard_packing', $document->standard_packing ?? '');
-        $templateProcessor->setValue('offer_validity', $document->offer_validity ?? '');
+        $this->setMultilineValue($templateProcessor, 'stock_conditions', $document->stock_conditions ?? '');
+        $this->setMultilineValue($templateProcessor, 'term_of_payment', $document->term_of_payment ?? '');
+        $this->setMultilineValue($templateProcessor, 'price_conditions', $document->price_conditions ?? '');
+        $this->setMultilineValue($templateProcessor, 'standard_packing', $document->standard_packing ?? '');
+        $this->setMultilineValue($templateProcessor, 'offer_validity', $document->offer_validity ?? '');
         $templateProcessor->setValue('signature_name', auth()->user()->name ?? '');
         $templateProcessor->setValue('delivery_date', '');
         $templateProcessor->setValue('courier', '');

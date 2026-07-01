@@ -176,6 +176,48 @@ class TemplateGenerator
         $cr->addText('${notes}', 'fSmall', 'pAddress');
     }
 
+    private function addQuotationTerms(Section $section): void
+    {
+        $section->addText(' ');
+        $section->addLine(['weight' => 1, 'color' => 'CCCCCC', 'spaceAfter' => 100]);
+
+        $table = $section->addTable(['borderSize' => 0, 'cellMargin' => 40]);
+        $row = $table->addRow();
+
+        $cl = $row->addCell(Converter::cmToTwip(9));
+        $cl->addText('INFORMASI PEMBAYARAN', 'fLabel', 'pLeft');
+        $cl->addText('Bank ${bank_name}', 'fValue', 'pAddress');
+        $cl->addText('Atas Nama: ${bank_account_name}', 'fValue', 'pAddress');
+        $cl->addText('No. Rekening: ${bank_account_number}', 'fValue', 'pAddress');
+
+        $cr = $row->addCell(Converter::cmToTwip(8.5));
+        $cr->addText('KETENTUAN PENAWARAN', 'fLabel', 'pLeft');
+        
+        $tr1 = $cr->addTextRun(['spaceAfter' => 20]);
+        $tr1->addText('Kondisi Stok: ', 'fSmallBold');
+        $tr1->addText('${stock_conditions}', 'fSmall');
+
+        $tr2 = $cr->addTextRun(['spaceAfter' => 20]);
+        $tr2->addText('Syarat Pembayaran: ', 'fSmallBold');
+        $tr2->addText('${term_of_payment}', 'fSmall');
+
+        $tr3 = $cr->addTextRun(['spaceAfter' => 20]);
+        $tr3->addText('Kondisi Harga: ', 'fSmallBold');
+        $tr3->addText('${price_conditions}', 'fSmall');
+
+        $tr4 = $cr->addTextRun(['spaceAfter' => 20]);
+        $tr4->addText('Standard Packing: ', 'fSmallBold');
+        $tr4->addText('${standard_packing}', 'fSmall');
+
+        $tr5 = $cr->addTextRun(['spaceAfter' => 40]);
+        $tr5->addText('Masa Berlaku: ', 'fSmallBold');
+        $tr5->addText('${offer_validity}', 'fSmall');
+
+        $cr->addText('Catatan / Syarat Lain:', 'fLabel', 'pLeft');
+        $cr->addText('${terms}', 'fSmall', 'pAddress');
+        $cr->addText('${notes}', 'fSmall', 'pAddress');
+    }
+
     private function addSignature(Section $section, array $rows = [['Hormat Kami', '']]): void
     {
         $section->addText(' ');
@@ -260,7 +302,7 @@ class TemplateGenerator
         $this->addTotals($section);
         $section->addText(' ');
         $section->addText('Demikian penawaran ini kami sampaikan. Harga di atas belum termasuk PPN 11%. Penawaran ini berlaku selama 14 (empat belas) hari sejak tanggal surat.', 'fValue', 'pLeft');
-        $this->addTerms($section);
+        $this->addQuotationTerms($section);
         $this->addSignature($section, [['Hormat Kami', '${signature_name}'], ['Mengetahui', '${signature_name2}']]);
         $this->addFooter($section);
         $this->save('quotation.docx');
@@ -437,6 +479,10 @@ class TemplateGenerator
         // Also save for prefixes (ifs and af)
         foreach (['ifs_', 'af_'] as $prefix) {
             $prefixedPath = __DIR__ . '/templates/' . $prefix . $filename;
+            if ($prefix === 'ifs_' && $filename === 'purchase_order.docx' && file_exists($prefixedPath)) {
+                echo "  [SKIP] " . $prefix . $filename . " (skipped to preserve user edits)\n";
+                continue;
+            }
             copy($path, $prefixedPath);
             echo "  [OK] " . $prefix . $filename . " (copied)\n";
         }
