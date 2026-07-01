@@ -671,7 +671,13 @@ async function handleSavePartner() {
 
         isOpenPartnerModal.value = false;
     } catch (e) {
-        alert(e.response?.data?.message || "Gagal menambah partner");
+        const errData = e.response?.data;
+        if (errData?.errors) {
+            const msgs = Object.values(errData.errors).flat();
+            alert("Gagal menambah partner: " + msgs.join("\n"));
+        } else {
+            alert(errData?.message || "Gagal menambah partner");
+        }
     } finally {
         isSavingPartner.value = false;
     }
