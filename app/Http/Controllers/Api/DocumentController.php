@@ -686,10 +686,11 @@ class DocumentController extends Controller
         $value = $value ?? '';
         $lines = explode("\n", str_replace("\r", "", $value));
         $textrun = new \PhpOffice\PhpWord\Element\TextRun();
-        $textrun->addText(array_shift($lines));
+        $fontStyle = ['name' => 'Arial', 'size' => 10];
+        $textrun->addText(array_shift($lines), $fontStyle);
         foreach ($lines as $line) {
             $textrun->addTextBreak();
-            $textrun->addText($line);
+            $textrun->addText($line, $fontStyle);
         }
         $templateProcessor->setComplexValue($placeholder, $textrun);
     }

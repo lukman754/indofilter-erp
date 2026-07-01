@@ -24,7 +24,7 @@ class TemplateGenerator
         $darkBlue = '0E3B8A';
         $lightBlue = 'E8EFFD';
 
-        $this->phpWord->setDefaultFontName('Calibri');
+        $this->phpWord->setDefaultFontName('Arial');
         $this->phpWord->setDefaultFontSize(10);
 
         $this->styles = compact('blue', 'darkBlue', 'lightBlue');
@@ -36,20 +36,20 @@ class TemplateGenerator
         $this->phpWord->addParagraphStyle('pAddress', ['spaceAfter' => 0, 'lineHeight' => 1.0]);
         $this->phpWord->addParagraphStyle('pSmall', ['spaceAfter' => 40, 'lineHeight' => 1.0]);
 
-        $this->phpWord->addFontStyle('fTitle', ['name' => 'Calibri', 'size' => 16, 'bold' => true, 'color' => $darkBlue]);
-        $this->phpWord->addFontStyle('fDocType', ['name' => 'Calibri', 'size' => 14, 'bold' => true, 'color' => $blue]);
-        $this->phpWord->addFontStyle('fCompany', ['name' => 'Calibri', 'size' => 14, 'bold' => true, 'color' => $darkBlue]);
-        $this->phpWord->addFontStyle('fLabel', ['name' => 'Calibri', 'size' => 10, 'bold' => true]);
-        $this->phpWord->addFontStyle('fValue', ['name' => 'Calibri', 'size' => 10]);
-        $this->phpWord->addFontStyle('fSmall', ['name' => 'Calibri', 'size' => 8, 'color' => '666666']);
-        $this->phpWord->addFontStyle('fSmallBold', ['name' => 'Calibri', 'size' => 8, 'bold' => true, 'color' => '666666']);
-        $this->phpWord->addFontStyle('fTableHeader', ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => 'FFFFFF']);
-        $this->phpWord->addFontStyle('fTableCell', ['name' => 'Calibri', 'size' => 9]);
-        $this->phpWord->addFontStyle('fTotalLabel', ['name' => 'Calibri', 'size' => 10, 'bold' => true]);
-        $this->phpWord->addFontStyle('fTotalValue', ['name' => 'Calibri', 'size' => 11, 'bold' => true, 'color' => $darkBlue]);
-        $this->phpWord->addFontStyle('fAddressLabel', ['name' => 'Calibri', 'size' => 11, 'bold' => true]);
-        $this->phpWord->addFontStyle('fAddressName', ['name' => 'Calibri', 'size' => 13, 'bold' => true]);
-        $this->phpWord->addFontStyle('fAddressText', ['name' => 'Calibri', 'size' => 12]);
+        $this->phpWord->addFontStyle('fTitle', ['name' => 'Arial', 'size' => 16, 'bold' => true, 'color' => $darkBlue]);
+        $this->phpWord->addFontStyle('fDocType', ['name' => 'Arial', 'size' => 14, 'bold' => true, 'color' => $blue]);
+        $this->phpWord->addFontStyle('fCompany', ['name' => 'Arial', 'size' => 14, 'bold' => true, 'color' => $darkBlue]);
+        $this->phpWord->addFontStyle('fLabel', ['name' => 'Arial', 'size' => 10, 'bold' => true]);
+        $this->phpWord->addFontStyle('fValue', ['name' => 'Arial', 'size' => 10]);
+        $this->phpWord->addFontStyle('fSmall', ['name' => 'Arial', 'size' => 10, 'color' => '666666']);
+        $this->phpWord->addFontStyle('fSmallBold', ['name' => 'Arial', 'size' => 10, 'bold' => true, 'color' => '666666']);
+        $this->phpWord->addFontStyle('fTableHeader', ['name' => 'Arial', 'size' => 10, 'bold' => true, 'color' => 'FFFFFF']);
+        $this->phpWord->addFontStyle('fTableCell', ['name' => 'Arial', 'size' => 10]);
+        $this->phpWord->addFontStyle('fTotalLabel', ['name' => 'Arial', 'size' => 10, 'bold' => true]);
+        $this->phpWord->addFontStyle('fTotalValue', ['name' => 'Arial', 'size' => 10, 'bold' => true, 'color' => $darkBlue]);
+        $this->phpWord->addFontStyle('fAddressLabel', ['name' => 'Arial', 'size' => 10, 'bold' => true]);
+        $this->phpWord->addFontStyle('fAddressName', ['name' => 'Arial', 'size' => 10, 'bold' => true]);
+        $this->phpWord->addFontStyle('fAddressText', ['name' => 'Arial', 'size' => 10]);
     }
 
     private function addHeader(Section $section, string $docType = 'QUOTATION'): void
