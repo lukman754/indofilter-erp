@@ -15,6 +15,11 @@ class DocumentItem extends Model
         'uom',
         'unit_price',
         'total',
+        'variations',
+    ];
+
+    protected $casts = [
+        'variations' => 'array',
     ];
 
     public function document(): BelongsTo

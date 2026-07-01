@@ -378,6 +378,8 @@ function addItem() {
         uom: "PCS",
         unit_price: 0,
         total: 0,
+        variations: [],
+        has_variations: false,
     });
 }
 
@@ -388,6 +390,64 @@ function removeItem(index) {
 function calcItem(item) {
     item.total =
         (parseFloat(item.qty) || 0) * (parseFloat(item.unit_price) || 0);
+}
+
+function toggleVariations(item) {
+    item.has_variations = !item.has_variations;
+    if (item.has_variations) {
+        if (!item.variations) {
+            item.variations = [];
+        }
+        if (item.variations.length === 0) {
+            item.variations.push({ name: "", qty: 1, unit_price: 0, total: 0 });
+        }
+        recalcParentFromVariations(item);
+    } else {
+        calcItem(item);
+    }
+}
+
+function addVariation(item) {
+    if (!item.variations) {
+        item.variations = [];
+    }
+    item.variations.push({ name: "", qty: 1, unit_price: 0, total: 0 });
+    recalcParentFromVariations(item);
+}
+
+function removeVariation(item, index) {
+    item.variations.splice(index, 1);
+    recalcParentFromVariations(item);
+}
+
+function onVariationQtyInput(item, v, e) {
+    const val = parseInt(e.target.value, 10);
+    v.qty = isNaN(val) ? 0 : val;
+    v.total = v.qty * (v.unit_price || 0);
+    recalcParentFromVariations(item);
+}
+
+function onVariationPriceInput(item, v, e) {
+    const raw = e.target.value.replace(/[^\d]/g, "");
+    v.unit_price = raw ? parseInt(raw, 10) : 0;
+    e.target.value = raw
+        ? new Intl.NumberFormat("id-ID").format(parseInt(raw, 10))
+        : "";
+    v.total = (v.qty || 0) * v.unit_price;
+    recalcParentFromVariations(item);
+}
+
+function recalcParentFromVariations(item) {
+    if (!item.has_variations || !item.variations || !item.variations.length) return;
+    let totalQty = 0;
+    let totalAmount = 0;
+    item.variations.forEach((v) => {
+        totalQty += parseInt(v.qty, 10) || 0;
+        totalAmount += parseInt(v.total, 10) || 0;
+    });
+    item.qty = totalQty;
+    item.total = totalAmount;
+    item.unit_price = totalQty > 0 ? Math.round(totalAmount / totalQty) : 0;
 }
 
 function formatRupiah(val) {
@@ -645,14 +705,19 @@ async function handleCopyFromDocument() {
         form.value.vendor_bank_account_number =
             doc.vendor_bank_account_number || "";
 
-        form.value.items = (doc.items || []).map((i) => ({
-            product_name: i.product_name || "",
-            description: i.description || "",
-            qty: parseFloat(i.qty) || 1,
-            uom: i.uom || "PCS",
-            unit_price: parseFloat(i.unit_price) || 0,
-            total: parseFloat(i.total) || 0,
-        }));
+        form.value.items = (doc.items || []).map((i) => {
+            const hasVars = i.variations && i.variations.length > 0;
+            return {
+                product_name: i.product_name || "",
+                description: i.description || "",
+                qty: parseFloat(i.qty) || 1,
+                uom: i.uom || "PCS",
+                unit_price: parseFloat(i.unit_price) || 0,
+                total: parseFloat(i.total) || 0,
+                variations: i.variations || [],
+                has_variations: hasVars,
+            };
+        });
 
         if (form.value.document_type === "Delivery Address") {
             form.value.items = [];
@@ -697,14 +762,19 @@ async function loadDocument() {
             vendor_bank_name: doc.vendor_bank_name || "",
             vendor_bank_account_name: doc.vendor_bank_account_name || "",
             vendor_bank_account_number: doc.vendor_bank_account_number || "",
-            items: (doc.items || []).map((i) => ({
-                product_name: i.product_name || "",
-                description: i.description || "",
-                qty: i.qty || 1,
-                uom: i.uom || "PCS",
-                unit_price: i.unit_price || 0,
-                total: i.total || 0,
-            })),
+            items: (doc.items || []).map((i) => {
+                const hasVars = i.variations && i.variations.length > 0;
+                return {
+                    product_name: i.product_name || "",
+                    description: i.description || "",
+                    qty: i.qty || 1,
+                    uom: i.uom || "PCS",
+                    unit_price: i.unit_price || 0,
+                    total: i.total || 0,
+                    variations: i.variations || [],
+                    has_variations: hasVars,
+                };
+            }),
             status: doc.status || "draft",
             reference_id: doc.reference_id || "",
             sender_name: doc.sender_name || "",
@@ -788,6 +858,7 @@ async function handleSave(confirm = false) {
                 uom: item.uom,
                 unit_price: item.unit_price,
                 total: item.total,
+                variations: item.has_variations ? item.variations : null,
             })),
         };
 
@@ -1648,98 +1719,184 @@ onUnmounted(() => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200">
-                                <tr v-for="(item, i) in form.items" :key="i">
-                                    <td class="px-1.5 py-1">
-                                        <input
-                                            v-model="item.product_name"
-                                            list="company-products"
-                                            @input="onProductNameInput(item)"
-                                            placeholder="Nama barang"
-                                            class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                        />
-                                    </td>
-                                    <td class="px-1.5 py-1">
-                                        <input
-                                            v-model="item.description"
-                                            placeholder="Deskripsi"
-                                            class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                        />
-                                    </td>
-                                    <td class="px-1.5 py-1">
-                                        <input
-                                            :value="item.qty"
-                                            @input="onQtyInput(item, $event)"
-                                            inputmode="numeric"
-                                            placeholder="0"
-                                            class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-right"
-                                        />
-                                    </td>
-                                    <td class="px-1.5 py-1">
-                                        <select
-                                            v-model="item.uom"
-                                            class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                        >
-                                            <option value="PCS">PCS</option>
-                                            <option value="KG">KG</option>
-                                            <option value="MTR">MTR</option>
-                                            <option value="LTR">LTR</option>
-                                            <option value="BOX">BOX</option>
-                                            <option value="ROL">ROL</option>
-                                            <option value="SET">SET</option>
-                                            <option value="UNIT">UNIT</option>
-                                        </select>
-                                    </td>
-                                    <td
-                                        v-if="
-                                            form.document_type !==
-                                            'Delivery Slip'
-                                        "
-                                        class="px-1.5 py-1"
-                                    >
-                                        <input
-                                            :value="
-                                                formatRupiah(item.unit_price)
-                                            "
-                                            @input="onPriceInput(item, $event)"
-                                            inputmode="numeric"
-                                            placeholder="0"
-                                            class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-right"
-                                        />
-                                    </td>
-                                    <td
-                                        v-if="
-                                            form.document_type !==
-                                            'Delivery Slip'
-                                        "
-                                        class="px-1.5 py-1 text-right text-sm font-medium text-gray-700"
-                                    >
-                                        {{
-                                            new Intl.NumberFormat(
-                                                "id-ID",
-                                            ).format(item.total || 0)
-                                        }}
-                                    </td>
-                                    <td class="px-1 py-1 text-center">
-                                        <button
-                                            @click="removeItem(i)"
-                                            class="text-red-400 hover:text-red-600 transition-colors"
-                                        >
-                                            <svg
-                                                class="w-4 h-4"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
+                                <template v-for="(item, i) in form.items" :key="i">
+                                    <tr>
+                                        <td class="px-1.5 py-1">
+                                            <input
+                                                v-model="item.product_name"
+                                                list="company-products"
+                                                @input="onProductNameInput(item)"
+                                                placeholder="Nama barang"
+                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </td>
+                                        <td class="px-1.5 py-1">
+                                            <input
+                                                v-model="item.description"
+                                                placeholder="Deskripsi"
+                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                            />
+                                        </td>
+                                        <td class="px-1.5 py-1">
+                                            <input
+                                                :value="item.qty"
+                                                @input="onQtyInput(item, $event)"
+                                                :disabled="item.has_variations"
+                                                inputmode="numeric"
+                                                placeholder="0"
+                                                :class="item.has_variations ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''"
+                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-right"
+                                            />
+                                        </td>
+                                        <td class="px-1.5 py-1">
+                                            <select
+                                                v-model="item.uom"
+                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                             >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                                ></path>
-                                            </svg>
-                                        </button>
-                                    </td>
-                                </tr>
+                                                <option value="PCS">PCS</option>
+                                                <option value="KG">KG</option>
+                                                <option value="MTR">MTR</option>
+                                                <option value="LTR">LTR</option>
+                                                <option value="BOX">BOX</option>
+                                                <option value="ROL">ROL</option>
+                                                <option value="SET">SET</option>
+                                                <option value="UNIT">UNIT</option>
+                                            </select>
+                                        </td>
+                                        <td
+                                            v-if="
+                                                form.document_type !==
+                                                'Delivery Slip'
+                                            "
+                                            class="px-1.5 py-1"
+                                        >
+                                            <input
+                                                :value="
+                                                    formatRupiah(item.unit_price)
+                                                "
+                                                @input="onPriceInput(item, $event)"
+                                                :disabled="item.has_variations"
+                                                inputmode="numeric"
+                                                placeholder="0"
+                                                :class="item.has_variations ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''"
+                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-right"
+                                            />
+                                        </td>
+                                        <td
+                                            v-if="
+                                                form.document_type !==
+                                                'Delivery Slip'
+                                            "
+                                            class="px-1.5 py-1 text-right text-sm font-medium text-gray-700"
+                                        >
+                                            {{
+                                                new Intl.NumberFormat(
+                                                    "id-ID",
+                                                ).format(item.total || 0)
+                                            }}
+                                        </td>
+                                        <td class="px-1 py-1 text-center flex items-center justify-center gap-1.5">
+                                            <!-- Manage Variations (only show if not delivery slip) -->
+                                            <button
+                                                v-if="form.document_type !== 'Delivery Slip'"
+                                                @click="toggleVariations(item)"
+                                                type="button"
+                                                :class="item.has_variations ? 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200' : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'"
+                                                class="p-1 rounded border transition-colors flex items-center justify-center"
+                                                title="Kelola Variasi"
+                                            >
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                                                </svg>
+                                            </button>
+                                            <!-- Remove Item -->
+                                            <button
+                                                @click="removeItem(i)"
+                                                type="button"
+                                                class="p-1 rounded border border-gray-300 bg-gray-50 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors flex items-center justify-center"
+                                                title="Hapus Barang"
+                                            >
+                                                <svg
+                                                    class="w-3.5 h-3.5"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                    ></path>
+                                                </svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <!-- Variations Editor Row -->
+                                    <tr v-if="item.has_variations" class="bg-gray-50/50">
+                                        <td colspan="7" class="px-4 py-2 border-b border-gray-200">
+                                            <div class="border border-purple-100 rounded-lg p-3 bg-purple-50/10 space-y-2">
+                                                <div class="flex items-center justify-between">
+                                                    <span class="text-xs font-semibold text-purple-950 uppercase tracking-wider">Sub-Variasi Barang</span>
+                                                    <button
+                                                        @click="addVariation(item)"
+                                                        type="button"
+                                                        class="px-2 py-1 text-[10px] bg-purple-100 text-purple-700 hover:bg-purple-200 rounded border border-purple-200 transition-colors font-medium"
+                                                    >
+                                                        + Tambah Variasi
+                                                    </button>
+                                                </div>
+                                                <div class="grid grid-cols-12 gap-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider pb-1">
+                                                    <div class="col-span-6">Nama / Jenis Variasi (Contoh: 1.5 Inch (48.33mm))</div>
+                                                    <div class="col-span-2 text-right">Qty</div>
+                                                    <div class="col-span-3 text-right">Harga Satuan (Rp)</div>
+                                                    <div class="col-span-1 text-center"></div>
+                                                </div>
+                                                <div class="space-y-1.5">
+                                                    <div v-for="(v, vi) in item.variations" :key="vi" class="grid grid-cols-12 gap-2 items-center">
+                                                        <div class="col-span-6">
+                                                            <input
+                                                                v-model="v.name"
+                                                                type="text"
+                                                                placeholder="Nama variasi"
+                                                                class="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-purple-500 outline-none"
+                                                            />
+                                                        </div>
+                                                        <div class="col-span-2">
+                                                            <input
+                                                                :value="v.qty"
+                                                                @input="onVariationQtyInput(item, v, $event)"
+                                                                type="number"
+                                                                placeholder="0"
+                                                                class="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-purple-500 outline-none text-right"
+                                                            />
+                                                        </div>
+                                                        <div class="col-span-3">
+                                                            <input
+                                                                :value="formatRupiah(v.unit_price)"
+                                                                @input="onVariationPriceInput(item, v, $event)"
+                                                                type="text"
+                                                                placeholder="0"
+                                                                class="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-purple-500 outline-none text-right"
+                                                            />
+                                                        </div>
+                                                        <div class="col-span-1 text-center">
+                                                            <button
+                                                                @click="removeVariation(item, vi)"
+                                                                type="button"
+                                                                class="text-red-400 hover:text-red-600 transition-colors"
+                                                            >
+                                                                <svg class="w-3.5 h-3.5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
                                 <tr v-if="form.items.length === 0">
                                     <td
                                         :colspan="

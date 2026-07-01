@@ -253,7 +253,15 @@ onMounted(loadDocument)
                             </thead>
                             <tbody class="divide-y divide-gray-200">
                                 <tr v-for="(item, i) in doc.items" :key="i" :class="i % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
-                                    <td class="px-3 py-2 text-sm text-gray-700">{{ item.product_name }}</td>
+                                    <td class="px-3 py-2 text-sm text-gray-700">
+                                        <div>{{ item.product_name }}</div>
+                                        <div v-if="item.variations && item.variations.length > 0" class="mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1">
+                                            <div v-for="(v, vi) in item.variations" :key="vi" class="text-[11px] text-purple-700 flex items-center gap-1.5">
+                                                <span class="font-medium">{{ vi + 1 }}. {{ v.name }}</span>
+                                                <span class="text-gray-400 font-normal">({{ v.qty }} {{ item.uom }} @ {{ formatMoney(v.unit_price) }})</span>
+                                            </div>
+                                        </div>
+                                    </td>
                                     <td class="px-3 py-2 text-sm text-gray-500">{{ item.description || '-' }}</td>
                                     <td class="px-3 py-2 text-sm text-gray-700 text-right">{{ item.qty }}</td>
                                     <td class="px-3 py-2 text-sm text-gray-500">{{ item.uom }}</td>
