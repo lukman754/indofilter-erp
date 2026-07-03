@@ -303,9 +303,17 @@ class DocumentController extends Controller
             $templateProcessor = $this->fillTemplate($document);
             $templateProcessor->saveAs($fullPath);
 
+            $pdfGenerated = $this->convertToPdf($fullPath, $storagePath);
+
+            $msg = "Dokumen berhasil diekspor & disimpan ke:\n" . $fullPath;
+            if ($pdfGenerated) {
+                $pdfFileName = str_replace(['/', '\\'], '-', $document->document_number) . '.pdf';
+                $msg .= "\n\nSerta versi PDF berhasil disimpan ke:\n" . rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $pdfFileName;
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => "Dokumen berhasil diekspor & disimpan ke:\n" . $fullPath,
+                'message' => $msg,
                 'path' => $fullPath
             ]);
         } catch (\Exception $e) {
@@ -380,7 +388,33 @@ class DocumentController extends Controller
         $templateProcessor = $this->fillTemplate($document);
         $templateProcessor->saveAs($fullPath);
 
+        $this->convertToPdf($fullPath, $storagePath);
+
         return $fullPath;
+    }
+
+    private function convertToPdf(string $docxPath, string $outputDir): bool
+    {
+        $sofficePath = 'C:\\Program Files\\LibreOffice\\program\\soffice.exe';
+        if (!file_exists($sofficePath)) {
+            $sofficePath = 'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe';
+        }
+
+        if (!file_exists($sofficePath)) {
+            \Illuminate\Support\Facades\Log::warning("LibreOffice executable not found. PDF conversion skipped.");
+            return false;
+        }
+
+        $cmd = '"' . $sofficePath . '" --headless --convert-to pdf --outdir ' . escapeshellarg($outputDir) . ' ' . escapeshellarg($docxPath);
+        
+        exec($cmd, $output, $return);
+        
+        if ($return === 0) {
+            return true;
+        }
+        
+        \Illuminate\Support\Facades\Log::error("LibreOffice PDF conversion failed with exit code: {$return}. Output: " . implode("\n", $output));
+        return false;
     }
 
     public function getStoragePathForDocument(Document $document): ?string
