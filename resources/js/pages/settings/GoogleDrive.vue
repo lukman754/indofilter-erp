@@ -24,6 +24,7 @@ const documentTypes = [
     { key: "delivery_slip", label: "Delivery Slip (Surat Jalan)" },
     { key: "delivery_address", label: "Delivery Address (Alamat Kirim)" },
     { key: "purchase_order", label: "Purchase Order" },
+    { key: "po_masuk", label: "PO Masuk (Customer PO)" },
 ];
 
 const activeCompanyTab = ref("global"); // 'global' or company ID

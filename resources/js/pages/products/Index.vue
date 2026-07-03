@@ -101,13 +101,19 @@ async function save() {
 }
 
 async function confirmDelete(id) {
-    if (!confirm('Yakin ingin menghapus data ini?')) return
-    try {
-        await api.delete(id)
-        await fetchData()
-    } catch (e) {
-        alert('Gagal menghapus data')
-    }
+    appStore.showConfirm(
+        'Hapus Produk',
+        'Yakin ingin menghapus data ini?',
+        async () => {
+            try {
+                await api.delete(id)
+                await fetchData()
+                appStore.showNotification('Sukses', 'Produk berhasil dihapus.', 'success')
+            } catch (e) {
+                appStore.showNotification('Gagal', 'Gagal menghapus data.', 'error')
+            }
+        }
+    )
 }
 
 const route = useRoute()
@@ -170,6 +176,18 @@ watch(() => route.query.search, (newVal) => {
 
         <div class="bg-white rounded-lg border border-gray-200">
             <DataTable :columns="columns" :data="filteredItems" :loading="loading" empty-message="Belum ada produk">
+                <template #cell-name="{ row }">
+                    <div class="font-medium text-gray-900">{{ row.name }}</div>
+                    <div v-if="row.variations && row.variations.length > 0" class="mt-1.5 flex flex-wrap gap-1.5">
+                        <span 
+                            v-for="(v, index) in row.variations" 
+                            :key="index"
+                            class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 border border-blue-100 text-blue-700"
+                        >
+                            {{ v.name }}: {{ v.qty }} {{ row.uom || 'PCS' }} × {{ formatMoney(v.unit_price) }}
+                        </span>
+                    </div>
+                </template>
                 <template #cell-price="{ value }">
                     {{ formatMoney(value) }}
                 </template>

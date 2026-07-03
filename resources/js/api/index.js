@@ -87,6 +87,12 @@ export const documents = {
             'Content-Type': 'multipart/form-data'
         }
     }),
+    uploadPo: (id, formData) => api.post(`/documents/${id}/upload-po`, formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data'
+        }
+    }),
+    downloadPo: (id) => api.get(`/documents/${id}/download-po`, { responseType: 'blob' }),
 }
 
 export const dashboard = {

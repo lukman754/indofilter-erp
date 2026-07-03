@@ -2,8 +2,10 @@
 import { ref, onMounted, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import { dashboard, documents as docsApi } from "../api/index.js";
+import { useAppStore } from "../stores/app.js";
 
 const router = useRouter();
+const appStore = useAppStore();
 const stats = ref(null);
 const docs = ref([]);
 const loading = ref(true);
@@ -145,73 +147,118 @@ watch([search, activeType, activeStatus], () => {
     currentPage.value = 1;
 });
 
+function showConfirm(title, message, onConfirm, onCancel = null) {
+    appStore.showConfirm(title, message, onConfirm, onCancel)
+}
+
+function showNotification(title, message, type = 'success') {
+    appStore.showNotification(title, message, type)
+}
+
 // Action handlers
-async function handleConfirm(id) {
-    if (!confirm("Konfirmasi dokumen ini?")) return;
-    const doc = docs.value.find(d => d.id === id);
-    let overwrite = false;
-    if (doc && (doc.document_number || doc.number)) {
-        try {
-            const docNum = doc.document_number || doc.number;
-            const checkRes = await docsApi.checkLocalFile({ number: docNum });
-            if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
-                if (!window.confirm(`Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
-                    return;
-                }
-                overwrite = true;
-            }
-        } catch (e) {
-            console.error("Gagal memeriksa berkas lokal", e);
-        }
-    }
+async function executeConfirm(id, overwrite) {
     try {
         await docsApi.confirm(id, { overwrite });
         await fetchDashboard();
+        showNotification('Sukses', 'Dokumen berhasil dikonfirmasi.', 'success')
     } catch (e) {
-        alert("Gagal mengkonfirmasi dokumen");
+        showNotification('Gagal', 'Gagal mengkonfirmasi dokumen.', 'error')
     }
+}
+
+async function handleConfirm(id) {
+    showConfirm(
+        'Konfirmasi Dokumen',
+        'Apakah Anda yakin ingin mengkonfirmasi dokumen ini?',
+        async () => {
+            const doc = docs.value.find(d => d.id === id);
+            let overwrite = false;
+            if (doc && (doc.document_number || doc.number)) {
+                try {
+                    const docNum = doc.document_number || doc.number;
+                    const checkRes = await docsApi.checkLocalFile({ number: docNum });
+                    if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
+                        showConfirm(
+                            'Berkas Sudah Ada',
+                            `Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
+                            async () => {
+                                await executeConfirm(id, true)
+                            }
+                        )
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Gagal memeriksa berkas lokal", e);
+                }
+            }
+            await executeConfirm(id, false);
+        }
+    )
 }
 
 async function handleCancel(id) {
-    if (!confirm("Batalkan dokumen ini?")) return;
-    try {
-        await docsApi.cancel(id);
-        await fetchDashboard();
-    } catch (e) {
-        alert("Gagal membatalkan dokumen");
-    }
+    showConfirm(
+        'Batalkan Dokumen',
+        'Apakah Anda yakin ingin membatalkan dokumen ini?',
+        async () => {
+            try {
+                await docsApi.cancel(id);
+                await fetchDashboard();
+                showNotification('Sukses', 'Dokumen berhasil dibatalkan.', 'success')
+            } catch (e) {
+                showNotification('Gagal', 'Gagal membatalkan dokumen.', 'error')
+            }
+        }
+    )
 }
 
 async function handleDelete(id) {
-    if (!confirm("Yakin ingin menghapus dokumen ini?")) return;
-    try {
-        await docsApi.delete(id);
-        await fetchDashboard();
-    } catch (e) {
-        alert("Gagal menghapus dokumen");
-    }
+    showConfirm(
+        'Hapus Dokumen',
+        'Apakah Anda yakin ingin menghapus dokumen ini? Tindakan ini tidak dapat dibatalkan.',
+        async () => {
+            try {
+                await docsApi.delete(id);
+                await fetchDashboard();
+                showNotification('Sukses', 'Dokumen berhasil dihapus.', 'success')
+            } catch (e) {
+                showNotification('Gagal', 'Gagal menghapus dokumen.', 'error')
+            }
+        }
+    )
 }
 
 async function handleExport(id) {
     try {
-        let overwrite = false;
         let res = await docsApi.export(id, { overwrite: false });
         
         if (res.data && res.data.exists) {
-            if (window.confirm(`Berkas "${res.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
-                res = await docsApi.export(id, { overwrite: true });
-            } else {
-                return;
-            }
+            showConfirm(
+                'Berkas Sudah Ada',
+                `Berkas "${res.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
+                async () => {
+                    try {
+                        const overwriteRes = await docsApi.export(id, { overwrite: true });
+                        if (overwriteRes.data && overwriteRes.data.success) {
+                            showNotification('Ekspor Berhasil', overwriteRes.data.message, 'success')
+                        } else {
+                            showNotification('Ekspor Gagal', overwriteRes.data.message || 'Gagal mengekspor dokumen', 'error')
+                        }
+                    } catch (err) {
+                        showNotification('Ekspor Gagal', err.response?.data?.message || 'Gagal mengekspor dokumen', 'error')
+                    }
+                }
+            )
+            return;
         }
         
         if (res.data && res.data.success) {
-            alert(res.data.message);
+            showNotification('Ekspor Berhasil', res.data.message, 'success')
         } else {
-            alert(res.data.message || 'Gagal mengekspor dokumen');
+            showNotification('Ekspor Gagal', res.data.message || 'Gagal mengekspor dokumen', 'error')
         }
     } catch (e) {
-        alert(e.response?.data?.message || 'Gagal mengekspor dokumen');
+        showNotification('Ekspor Gagal', e.response?.data?.message || 'Gagal mengekspor dokumen', 'error')
     }
 }
 

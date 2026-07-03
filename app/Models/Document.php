@@ -51,6 +51,7 @@ class Document extends Model
         'reference_id',
         'customer_po_number',
         'customer_po_date',
+        'customer_po_file',
     ];
 
     protected function casts(): array
@@ -164,10 +165,10 @@ class Document extends Model
     private function spellNumber(float $number): string
     {
         if ($number == 0) {
-            return "Nol Rupiah";
+            return "NOL RUPIAH";
         }
         $integerPart = (int) $number;
         $spelled = trim($this->terbilang($integerPart));
-        return ucwords($spelled) . " Rupiah";
+        return strtoupper($spelled . " rupiah");
     }
 }

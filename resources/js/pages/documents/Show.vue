@@ -2,12 +2,14 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { documents as api } from '../../api/index.js'
+import { useAppStore } from '../../stores/app.js'
 
 const route = useRoute()
 const router = useRouter()
 const doc = ref(null)
 const loading = ref(true)
 const error = ref('')
+const appStore = useAppStore()
 
 const statusColors = {
     draft: 'bg-gray-100 text-gray-600',
@@ -40,70 +42,126 @@ async function loadDocument() {
     }
 }
 
-async function handleConfirm() {
-    if (!confirm('Konfirmasi dokumen ini?')) return
-    let overwrite = false
-    if (doc.value && doc.value.document_number) {
-        try {
-            const checkRes = await api.checkLocalFile({ number: doc.value.document_number })
-            if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
-                if (!window.confirm(`Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
-                    return
-                }
-                overwrite = true
-            }
-        } catch (e) {
-            console.error("Gagal memeriksa berkas lokal", e)
-        }
-    }
+function showConfirm(title, message, onConfirm, onCancel = null) {
+    appStore.showConfirm(title, message, onConfirm, onCancel)
+}
+
+function showNotification(title, message, type = 'success') {
+    appStore.showNotification(title, message, type)
+}
+
+async function executeConfirm(overwrite) {
     try {
         await api.confirm(route.params.id, { overwrite })
         await loadDocument()
+        showNotification('Sukses', 'Dokumen berhasil dikonfirmasi.', 'success')
     } catch (e) {
-        alert('Gagal mengkonfirmasi dokumen')
+        showNotification('Gagal', 'Gagal mengkonfirmasi dokumen.', 'error')
     }
+}
+
+async function handleConfirm() {
+    showConfirm(
+        'Konfirmasi Dokumen',
+        'Apakah Anda yakin ingin mengkonfirmasi dokumen ini?',
+        async () => {
+            let overwrite = false
+            if (doc.value && doc.value.document_number) {
+                try {
+                    const checkRes = await api.checkLocalFile({ number: doc.value.document_number })
+                    if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
+                        showConfirm(
+                            'Berkas Sudah Ada',
+                            `Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
+                            async () => {
+                                await executeConfirm(true)
+                            }
+                        )
+                        return
+                    }
+                } catch (e) {
+                    console.error("Gagal memeriksa berkas lokal", e)
+                }
+            }
+            await executeConfirm(false)
+        }
+    )
 }
 
 async function handleCancel() {
-    if (!confirm('Batalkan dokumen ini?')) return
-    try {
-        await api.cancel(route.params.id)
-        await loadDocument()
-    } catch (e) {
-        alert('Gagal membatalkan dokumen')
-    }
+    showConfirm(
+        'Batalkan Dokumen',
+        'Apakah Anda yakin ingin membatalkan dokumen ini?',
+        async () => {
+            try {
+                await api.cancel(route.params.id)
+                await loadDocument()
+                showNotification('Sukses', 'Dokumen berhasil dibatalkan.', 'success')
+            } catch (e) {
+                showNotification('Gagal', 'Gagal membatalkan dokumen.', 'error')
+            }
+        }
+    )
 }
 
 async function handleDelete() {
-    if (!confirm('Yakin ingin menghapus dokumen ini?')) return
-    try {
-        await api.delete(route.params.id)
-        router.push({ path: '/documents', query: { type: doc.value?.document_type } })
-    } catch (e) {
-        alert('Gagal menghapus dokumen')
-    }
+    showConfirm(
+        'Hapus Dokumen',
+        'Apakah Anda yakin ingin menghapus dokumen ini? Tindakan ini tidak dapat dibatalkan.',
+        async () => {
+            try {
+                await api.delete(route.params.id)
+                router.push({ path: '/documents', query: { type: doc.value?.document_type } })
+            } catch (e) {
+                showNotification('Gagal', 'Gagal menghapus dokumen.', 'error')
+            }
+        }
+    )
 }
 
 async function handleExport() {
     try {
-        let overwrite = false;
         let res = await api.export(route.params.id, { overwrite: false });
         
         if (res.data && res.data.exists) {
-            if (window.confirm(`Berkas "${res.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
-                res = await api.export(route.params.id, { overwrite: true });
-            } else {
-                return;
-            }
+            showConfirm(
+                'Berkas Sudah Ada',
+                `Berkas "${res.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
+                async () => {
+                    try {
+                        const overwriteRes = await api.export(route.params.id, { overwrite: true });
+                        if (overwriteRes.data && overwriteRes.data.success) {
+                            showNotification('Ekspor Berhasil', overwriteRes.data.message, 'success')
+                        } else {
+                            showNotification('Ekspor Gagal', overwriteRes.data.message || 'Gagal mengekspor dokumen', 'error')
+                        }
+                    } catch (err) {
+                        showNotification('Ekspor Gagal', err.response?.data?.message || 'Gagal mengekspor dokumen', 'error')
+                    }
+                }
+            )
+            return;
         }
         
         if (res.data && res.data.success) {
-            alert(res.data.message);
+            showNotification('Ekspor Berhasil', res.data.message, 'success')
         } else {
-            alert(res.data.message || 'Gagal mengekspor dokumen');
+            showNotification('Ekspor Gagal', res.data.message || 'Gagal mengekspor dokumen', 'error')
         }
     } catch (e) {
-        alert(e.response?.data?.message || 'Gagal mengekspor dokumen');
+        showNotification('Ekspor Gagal', e.response?.data?.message || 'Gagal mengekspor dokumen', 'error')
+    }
+}
+
+async function handleViewPoFile() {
+    if (!doc.value || !doc.value.id) return;
+    try {
+        const response = await api.downloadPo(doc.value.id);
+        const blob = new Blob([response.data], { type: response.headers['content-type'] });
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+    } catch (e) {
+        showNotification('Gagal Membuka PO', 'Gagal menampilkan file PO: ' + (e.response?.data?.message || e.message), 'error')
     }
 }
 
@@ -153,6 +211,17 @@ onMounted(loadDocument)
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                         </svg>
                         Hapus
+                    </button>
+                    <button
+                        v-if="(doc.type === 'invoice' || doc.type === 'proforma_invoice') && doc.customer_po_file"
+                        @click="handleViewPoFile"
+                        class="px-3 py-1.5 text-sm bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Lihat PO Customer
                     </button>
                     <button @click="handleExport" class="px-3 py-1.5 text-sm bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg transition-colors flex items-center gap-1">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -355,7 +424,7 @@ onMounted(loadDocument)
                                 <span class="text-lg text-blue-600">{{ formatMoney(doc.grand_total) }}</span>
                             </div>
                             <!-- Terbilang Display -->
-                            <div v-if="(doc.type === 'invoice' || doc.type === 'proforma_invoice') && doc.terbilang" class="text-xs text-right text-gray-500 italic mt-1 font-medium bg-gray-50 p-2 rounded border border-gray-100">
+                            <div v-if="(doc.type === 'invoice' || doc.type === 'proforma_invoice') && doc.terbilang" class="text-xs text-right text-gray-950 italic mt-1 font-bold bg-gray-50 p-2 rounded border border-gray-100">
                                 Terbilang: {{ doc.terbilang }}
                             </div>
                         </div>

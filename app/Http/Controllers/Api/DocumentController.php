@@ -89,6 +89,7 @@ class DocumentController extends Controller
             'vendor_bank_account_number' => 'nullable|string|max:255',
             'customer_po_number' => 'nullable|string|max:255',
             'customer_po_date' => 'nullable|date',
+            'customer_po_file' => 'nullable|string|max:255',
             'items' => 'sometimes|array',
             'items.*.product_name' => 'required_with:items|string|max:255',
             'items.*.description' => 'nullable|string',
@@ -195,6 +196,7 @@ class DocumentController extends Controller
             'vendor_bank_account_number' => 'nullable|string|max:255',
             'customer_po_number' => 'nullable|string|max:255',
             'customer_po_date' => 'nullable|date',
+            'customer_po_file' => 'nullable|string|max:255',
             'items' => 'sometimes|array',
             'items.*.product_name' => 'required_with:items|string|max:255',
             'items.*.description' => 'nullable|string',
@@ -484,6 +486,9 @@ class DocumentController extends Controller
 
         $templateProcessor->setValue('company_bank', $bank ? $this->formatBankAccount($bank) : '');
         $templateProcessor->setValue('doc_number', $document->document_number ?? '');
+        $templateProcessor->setValue('customer_po_number', $document->customer_po_number ?? '');
+        $templateProcessor->setValue('customer_po_date', $document->customer_po_date ? $this->formatIndonesianDate($document->customer_po_date) : '');
+        $templateProcessor->setValue('invoice_number', $document->reference?->document_number ?? '');
         $templateProcessor->setValue('doc_date', $this->formatIndonesianDate($document->date));
         $templateProcessor->setValue('doc_due_date', $this->formatIndonesianDate($document->due_date));
         $templateProcessor->setValue('partner_name', $document->recipient_name ?: $partner->name ?? '');
@@ -494,26 +499,107 @@ class DocumentController extends Controller
         $templateProcessor->setValue('partner_npwp', $partner->npwp ?? '');
 
         $templateProcessor->setValue('subtotal', $this->formatRupiah($document->subtotal));
-        $templateProcessor->setValue('discount', $this->formatRupiah($document->discount));
-        $templateProcessor->setValue('tax', $this->formatRupiah($document->tax));
-        $templateProcessor->setValue('grand_total', $this->formatRupiah($document->grand_total));
         $templateProcessor->setValue('terbilang', $document->terbilang ?? '');
         $templateProcessor->setValue('dp_percent', $this->formatQty($document->dp_percent ?? 0));
         $templateProcessor->setValue('dp_amount', $this->formatRupiah($document->dp_amount ?? 0));
         $templateProcessor->setValue('remaining_amount', $this->formatRupiah(($document->subtotal + $document->tax) - ($document->dp_amount ?? 0)));
         
         $paymentType = $document->payment_type ?? 'full';
-        $paymentTypeLabel = 'Grand Total';
-        if ($paymentType === 'dp') {
-            $paymentTypeLabel = 'Uang Muka (DP) ' . number_format((float) $document->dp_percent, 0) . '%';
-        } elseif ($paymentType === 'pelunasan') {
-            $paymentTypeLabel = 'Pelunasan ' . number_format((float) $document->dp_percent, 0) . '%';
-        }
         $templateProcessor->setValue('payment_type', $paymentType);
-        $templateProcessor->setValue('payment_type_label', $paymentTypeLabel);
+
+        $variables = $templateProcessor->getVariables();
+
+        // 1. Discount Row
+        if (in_array('discount', $variables)) {
+            $hasDiscount = (float)$document->discount > 0;
+            $templateProcessor->cloneRow('discount', $hasDiscount ? 1 : 0);
+            if ($hasDiscount) {
+                $templateProcessor->setValue('discount#1', $this->formatRupiah($document->discount));
+            }
+        }
+
+        // 2. Tax Row (PPN)
+        if (in_array('tax', $variables)) {
+            $hasTax = (bool)$document->is_ppn;
+            $templateProcessor->cloneRow('tax', $hasTax ? 1 : 0);
+            if ($hasTax) {
+                $templateProcessor->setValue('tax#1', $this->formatRupiah($document->tax));
+            }
+        }
+
+        // 3. Total Tagihan (Always shown if present in template)
+        $totalTagihanVal = $document->subtotal + $document->tax - $document->discount;
+        if (in_array('total_tagihan', $variables)) {
+            $templateProcessor->cloneRow('total_tagihan', 1);
+            $templateProcessor->setValue('total_tagihan#1', $this->formatRupiah($totalTagihanVal));
+        }
+
+        // 4. Payment Type Conditional Rows
+        if ($paymentType === 'full') {
+            if (in_array('dp_value', $variables)) {
+                $templateProcessor->cloneRow('dp_value', 0);
+            }
+            if (in_array('rem_value', $variables)) {
+                $templateProcessor->cloneRow('rem_value', 0);
+            }
+
+            if (in_array('grand_total', $variables)) {
+                $templateProcessor->cloneRow('grand_total', 1);
+                $templateProcessor->setValue('payment_type_label#1', 'BALANCE DUE');
+                $templateProcessor->setValue('grand_total#1', $this->formatRupiah($document->grand_total));
+            }
+        } else {
+            if (in_array('dp_value', $variables)) {
+                $templateProcessor->cloneRow('dp_value', 1);
+            }
+            if (in_array('rem_value', $variables)) {
+                $templateProcessor->cloneRow('rem_value', 1);
+            }
+
+            $dpPct = (float)$document->dp_percent;
+            $dpAmt = (float)$document->dp_amount;
+            $remAmt = $totalTagihanVal - $dpAmt;
+
+            if ($paymentType === 'dp') {
+                if (in_array('dp_value', $variables)) {
+                    $templateProcessor->setValue('dp_label#1', strtoupper('DP ' . number_format($dpPct, 0) . '%'));
+                    $templateProcessor->setValue('dp_value#1', $this->formatRupiah($dpAmt));
+                }
+
+                if (in_array('rem_value', $variables)) {
+                    $templateProcessor->setValue('rem_label#1', strtoupper('Pelunasan ' . (100 - (int)$dpPct) . '%'));
+                    $templateProcessor->setValue('rem_value#1', $this->formatRupiah($remAmt));
+                }
+
+                if (in_array('grand_total', $variables)) {
+                    $templateProcessor->cloneRow('grand_total', 1);
+                    $templateProcessor->setValue('payment_type_label#1', 'BALANCE DUE');
+                    $templateProcessor->setValue('grand_total#1', $this->formatRupiah($dpAmt));
+                }
+            } else if ($paymentType === 'pelunasan') {
+                if (in_array('dp_value', $variables)) {
+                    $templateProcessor->setValue('dp_label#1', strtoupper('DP ' . number_format($dpPct, 0) . '% (Sudah Dibayar)'));
+                    $templateProcessor->setValue('dp_value#1', $this->formatRupiah($dpAmt));
+                }
+
+                if (in_array('rem_value', $variables)) {
+                    $templateProcessor->setValue('rem_label#1', strtoupper('Pelunasan ' . (100 - (int)$dpPct) . '%'));
+                    $templateProcessor->setValue('rem_value#1', $this->formatRupiah($remAmt));
+                }
+
+                if (in_array('grand_total', $variables)) {
+                    $templateProcessor->cloneRow('grand_total', 1);
+                    $templateProcessor->setValue('payment_type_label#1', 'BALANCE DUE');
+                    $templateProcessor->setValue('grand_total#1', $this->formatRupiah($remAmt));
+                }
+            }
+        }
         $templateProcessor->setValue('bank_name', $bank?->bank_name ?? '');
+        $templateProcessor->setValue('bank_name#1', $bank?->bank_name ?? '');
         $templateProcessor->setValue('bank_account_name', $bank?->account_name ?? '');
+        $templateProcessor->setValue('bank_account_name#1', $bank?->account_name ?? '');
         $templateProcessor->setValue('bank_account_number', $bank?->account_number ?? '');
+        $templateProcessor->setValue('bank_account_number#1', $bank?->account_number ?? '');
         $vendorBankName = $document->vendor_bank_name;
         $vendorBankAccountName = $document->vendor_bank_account_name;
         $vendorBankAccountNumber = $document->vendor_bank_account_number;
@@ -649,6 +735,45 @@ class DocumentController extends Controller
                 $templateProcessor->setValue("uom#{$row}", $item->uom ?? '');
                 $templateProcessor->setValue("unit_price#{$row}", $this->formatRupiah($item->unit_price));
                 $templateProcessor->setValue("total#{$row}", $this->formatRupiah($item->total));
+            }
+        }
+
+        // 5. PO Masuk Image Insertion (Only for Invoice and Proforma Invoice)
+        $variables = $templateProcessor->getVariables();
+        if (in_array('po_image', $variables)) {
+            $isInvoiceOrProforma = in_array($document->type, ['invoice', 'proforma_invoice']);
+            $poNumber = $document->customer_po_number;
+            $foundPath = null;
+
+            $storagePath = $this->getStoragePathForPoMasuk($document);
+
+            if ($isInvoiceOrProforma && !empty($storagePath) && !empty($poNumber)) {
+                $baseDir = rtrim(str_replace('\\', '/', $storagePath), '/');
+                $extensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'JPG', 'JPEG', 'PNG'];
+                $safePoNames = [
+                    $poNumber,
+                    str_replace(['/', '\\'], '_', $poNumber),
+                    str_replace(['/', '\\'], '-', $poNumber),
+                ];
+                foreach ($safePoNames as $poName) {
+                    foreach ($extensions as $ext) {
+                        $fullPath = $baseDir . '/' . $poName . '.' . $ext;
+                        if (file_exists($fullPath)) {
+                            $foundPath = $fullPath;
+                            break 2;
+                        }
+                    }
+                }
+            }
+
+            if ($foundPath) {
+                $templateProcessor->setImageValue('po_image', [
+                    'path' => $foundPath,
+                    'width' => 600,
+                    'ratio' => true
+                ]);
+            } else {
+                $templateProcessor->setValue('po_image', '');
             }
         }
 
@@ -977,5 +1102,94 @@ class DocumentController extends Controller
         }
     }
 
+    public function uploadPoFile(Request $request, Document $document): JsonResponse
+    {
+        $request->validate([
+            'customer_po_file' => 'required|file|mimes:pdf,jpeg,png,jpg,gif|max:10240', // max 10MB
+        ]);
 
+        $file = $request->file('customer_po_file');
+        $storagePath = $this->getStoragePathForPoMasuk($document);
+        
+        if (!file_exists($storagePath)) {
+            mkdir($storagePath, 0755, true);
+        }
+        
+        // Delete old file if exists
+        if (!empty($document->customer_po_file)) {
+            $oldPath = rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $document->customer_po_file;
+            if (file_exists($oldPath)) {
+                @unlink($oldPath);
+            }
+        }
+
+        $extension = $file->getClientOriginalExtension();
+        $safeDocNumber = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $document->document_number);
+        $safePoNumber = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $document->customer_po_number ?: 'PO');
+        $filename = $safeDocNumber . ' - ' . $safePoNumber . '.' . $extension;
+        $file->move($storagePath, $filename);
+        
+        $document->update(['customer_po_file' => $filename]);
+
+        return response()->json([
+            'message' => 'PO File uploaded successfully',
+            'customer_po_file' => $filename
+        ]);
+    }
+
+    public function downloadPoFile(Document $document)
+    {
+        if (empty($document->customer_po_file)) {
+            abort(404, 'No PO file uploaded.');
+        }
+
+        $storagePath = $this->getStoragePathForPoMasuk($document);
+        $filePath = rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $document->customer_po_file;
+
+        if (!file_exists($filePath)) {
+            abort(404, 'File not found on server.');
+        }
+
+        return response()->file($filePath);
+    }
+
+    public function getStoragePathForPoMasuk(Document $document): string
+    {
+        $companyId = $document->company_id;
+
+        // 1. Check company-specific path setting for 'po_masuk'
+        $path = null;
+        if ($companyId) {
+            $path = \App\Models\Setting::get("local_path_po_masuk", null, $companyId);
+        }
+        if ($path) {
+            return $path;
+        }
+
+        // 2. Check global path setting for 'po_masuk'
+        $path = \App\Models\Setting::get("local_path_po_masuk");
+        if ($path) {
+            return $path;
+        }
+
+        // 3. Fallback: check company field po_masuk_path (from company model)
+        if ($document->company && !empty($document->company->po_masuk_path)) {
+            return $document->company->po_masuk_path;
+        }
+
+        // 4. Fallback: check general base path and construct path dynamically
+        $basePath = \App\Models\Setting::get('documents_storage_path');
+        if (empty($basePath)) {
+            $basePath = env('DOCUMENTS_STORAGE_PATH');
+        }
+
+        if ($basePath) {
+            $companyName = $document->company ? $document->company->name : null;
+            $companyDir = $companyName ? str_replace('.', '', $companyName) : 'Default';
+            return rtrim($basePath, '/\\') . DIRECTORY_SEPARATOR . $companyDir . DIRECTORY_SEPARATOR . 'PO MASUK';
+        }
+
+        // 5. Hard fallback
+        return storage_path('app/public/po_masuk');
+    }
 }

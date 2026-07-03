@@ -42,6 +42,11 @@ const routes = [
                 component: () => import('../pages/products/History.vue'),
             },
             {
+                path: 'partners/:id/history',
+                name: 'partners.history',
+                component: () => import('../pages/partners/History.vue'),
+            },
+            {
                 path: 'documents',
                 name: 'documents',
                 component: () => import('../pages/documents/Index.vue'),

@@ -18,6 +18,7 @@ class Company extends Model
         'phone',
         'email',
         'npwp',
+        'po_masuk_path',
         'is_active',
     ];
 

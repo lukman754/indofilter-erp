@@ -131,26 +131,41 @@ class TemplateGenerator
 
     private function addTotals(Section $section): void
     {
-        $table = $section->addTable(['borderSize' => 0, 'cellMargin' => 40, 'alignment' => Jc::END]);
-        $lW = Converter::cmToTwip(3.5); $vW = Converter::cmToTwip(3.5);
+        $masterTable = $section->addTable(['borderSize' => 0, 'cellMargin' => 0]);
+        $row = $masterTable->addRow();
+
+        // Left Cell: Bank Info
+        $cLeft = $row->addCell(Converter::cmToTwip(9.5), ['valign' => 'top']);
+        $cLeft->addText('INFORMASI PEMBAYARAN', 'fLabel', 'pLeft');
+        $cLeft->addText('Bank: ${bank_name}', 'fValue', 'pAddress');
+        $cLeft->addText('No. Rekening: ${bank_account_number}', 'fValue', 'pAddress');
+        $cLeft->addText('Atas Nama: ${bank_account_name}', 'fValue', 'pAddress');
+
+        // Right Cell: Totals Table
+        $cRight = $row->addCell(Converter::cmToTwip(8.0), ['valign' => 'top']);
+        $totalsTable = $cRight->addTable(['borderSize' => 0, 'cellMargin' => 40, 'alignment' => Jc::END]);
+        $lW = Converter::cmToTwip(4.5); $vW = Converter::cmToTwip(3.5);
 
         $rows = [
             ['Subtotal', '${subtotal}'],
             ['Diskon', '${discount}'],
             ['PPN (11%)', '${tax}'],
-            ['Total', '${grand_total}'],
+            ['Total Tagihan', '${total_tagihan}'],
+            ['${dp_label}', '${dp_value}'],
+            ['${rem_label}', '${rem_value}'],
+            ['${payment_type_label}', '${grand_total}'],
         ];
         foreach ($rows as $i => $r) {
-            $table->addRow();
-            $c = $table->addCell($lW, ['alignment' => Jc::END]);
-            $c->addText($r[0], $i == 3 ? 'fTotalLabel' : 'fLabel', 'pRight');
-            $c = $table->addCell($vW, [
+            $totalsTable->addRow();
+            $c = $totalsTable->addCell($lW, ['alignment' => Jc::END]);
+            $c->addText($r[0], $i == 6 ? 'fTotalLabel' : 'fLabel', 'pRight');
+            $c = $totalsTable->addCell($vW, [
                 'alignment' => Jc::END,
-                'bgColor' => $i == 3 ? $this->styles['lightBlue'] : null,
-                'borderSize' => $i == 3 ? 1 : null,
-                'borderColor' => $i == 3 ? $this->styles['blue'] : null,
+                'bgColor' => $i == 6 ? $this->styles['lightBlue'] : null,
+                'borderSize' => $i == 6 ? 1 : null,
+                'borderColor' => $i == 6 ? $this->styles['blue'] : null,
             ]);
-            $c->addText($r[1], $i == 3 ? 'fTotalValue' : 'fValue', 'pRight');
+            $c->addText($r[1], $i == 6 ? 'fTotalValue' : 'fValue', 'pRight');
         }
     }
 
@@ -162,18 +177,12 @@ class TemplateGenerator
         $table = $section->addTable(['borderSize' => 0, 'cellMargin' => 40]);
         $row = $table->addRow();
 
-        $cl = $row->addCell(Converter::cmToTwip(9));
-        $cl->addText('INFORMASI PEMBAYARAN', 'fLabel', 'pLeft');
-        $cl->addText('Bank ${bank_name}', 'fValue', 'pAddress');
-        $cl->addText('Atas Nama: ${bank_account_name}', 'fValue', 'pAddress');
-        $cl->addText('No. Rekening: ${bank_account_number}', 'fValue', 'pAddress');
-
-        $cr = $row->addCell(Converter::cmToTwip(8.5));
-        $cr->addText('SYARAT DAN KETENTUAN', 'fLabel', 'pLeft');
-        $cr->addText('${terms}', 'fSmall', 'pAddress');
-        $cr->addText(' ', 'fValue', 'pAddress');
-        $cr->addText('Catatan:', 'fLabel', 'pLeft');
-        $cr->addText('${notes}', 'fSmall', 'pAddress');
+        $cl = $row->addCell(Converter::cmToTwip(17.5));
+        $cl->addText('SYARAT DAN KETENTUAN', 'fLabel', 'pLeft');
+        $cl->addText('${terms}', 'fSmall', 'pAddress');
+        $cl->addText(' ', 'fValue', 'pAddress');
+        $cl->addText('Catatan:', 'fLabel', 'pLeft');
+        $cl->addText('${notes}', 'fSmall', 'pAddress');
     }
 
     private function addQuotationTerms(Section $section): void
@@ -184,38 +193,32 @@ class TemplateGenerator
         $table = $section->addTable(['borderSize' => 0, 'cellMargin' => 40]);
         $row = $table->addRow();
 
-        $cl = $row->addCell(Converter::cmToTwip(9));
-        $cl->addText('INFORMASI PEMBAYARAN', 'fLabel', 'pLeft');
-        $cl->addText('Bank ${bank_name}', 'fValue', 'pAddress');
-        $cl->addText('Atas Nama: ${bank_account_name}', 'fValue', 'pAddress');
-        $cl->addText('No. Rekening: ${bank_account_number}', 'fValue', 'pAddress');
-
-        $cr = $row->addCell(Converter::cmToTwip(8.5));
-        $cr->addText('KETENTUAN PENAWARAN', 'fLabel', 'pLeft');
+        $cl = $row->addCell(Converter::cmToTwip(17.5));
+        $cl->addText('KETENTUAN PENAWARAN', 'fLabel', 'pLeft');
         
-        $tr1 = $cr->addTextRun(['spaceAfter' => 20]);
+        $tr1 = $cl->addTextRun(['spaceAfter' => 20]);
         $tr1->addText('Kondisi Stok: ', 'fSmallBold');
         $tr1->addText('${stock_conditions}', 'fSmall');
 
-        $tr2 = $cr->addTextRun(['spaceAfter' => 20]);
+        $tr2 = $cl->addTextRun(['spaceAfter' => 20]);
         $tr2->addText('Syarat Pembayaran: ', 'fSmallBold');
         $tr2->addText('${term_of_payment}', 'fSmall');
 
-        $tr3 = $cr->addTextRun(['spaceAfter' => 20]);
+        $tr3 = $cl->addTextRun(['spaceAfter' => 20]);
         $tr3->addText('Kondisi Harga: ', 'fSmallBold');
         $tr3->addText('${price_conditions}', 'fSmall');
 
-        $tr4 = $cr->addTextRun(['spaceAfter' => 20]);
+        $tr4 = $cl->addTextRun(['spaceAfter' => 20]);
         $tr4->addText('Standard Packing: ', 'fSmallBold');
         $tr4->addText('${standard_packing}', 'fSmall');
 
-        $tr5 = $cr->addTextRun(['spaceAfter' => 40]);
+        $tr5 = $cl->addTextRun(['spaceAfter' => 40]);
         $tr5->addText('Masa Berlaku: ', 'fSmallBold');
         $tr5->addText('${offer_validity}', 'fSmall');
 
-        $cr->addText('Catatan / Syarat Lain:', 'fLabel', 'pLeft');
-        $cr->addText('${terms}', 'fSmall', 'pAddress');
-        $cr->addText('${notes}', 'fSmall', 'pAddress');
+        $cl->addText('Catatan / Syarat Lain:', 'fLabel', 'pLeft');
+        $cl->addText('${terms}', 'fSmall', 'pAddress');
+        $cl->addText('${notes}', 'fSmall', 'pAddress');
     }
 
     private function addSignature(Section $section, array $rows = [['Hormat Kami', '']]): void
@@ -324,6 +327,8 @@ class TemplateGenerator
         $section->addText('Pembayaran harus dilakukan sebelum barang dikirim. Proforma ini berlaku selama 7 (tujuh) hari sejak tanggal diterbitkan.', 'fValue', 'pLeft');
         $this->addTerms($section);
         $this->addSignature($section, [['Hormat Kami', '${signature_name}']]);
+        $section->addText(' ');
+        $section->addText('${po_image}');
         $this->addFooter($section);
         $this->save('proforma_invoice.docx');
     }
@@ -344,6 +349,8 @@ class TemplateGenerator
         $section->addText('Pembayaran paling lambat pada tanggal jatuh tempo. Keterlambatan pembayaran akan dikenakan denda sebesar 2% per bulan.', 'fValue', 'pLeft');
         $this->addTerms($section);
         $this->addSignature($section, [['Hormat Kami', '${signature_name}']]);
+        $section->addText(' ');
+        $section->addText('${po_image}');
         $this->addFooter($section);
         $this->save('invoice.docx');
     }
@@ -367,7 +374,7 @@ class TemplateGenerator
         $cl->addText('${partner_phone}', 'fSmall', 'pAddress');
 
         $cr = $row->addCell(Converter::cmToTwip(8.5));
-        foreach ([['No. Referensi', '${doc_number}'], ['Tanggal', '${doc_date}'], ['No. Invoice', '${invoice_number}']] as $ii) {
+        foreach ([['No. Referensi', '${customer_po_number}'], ['Tanggal', '${doc_date}'], ['No. Invoice', '${invoice_number}']] as $ii) {
             $tr = $cr->addTextRun(['spaceAfter' => 40]);
             $tr->addText($ii[0] . '  :  ', 'fLabel');
             $tr->addText($ii[1], 'fValue');
@@ -479,7 +486,7 @@ class TemplateGenerator
         // Also save for prefixes (ifs and af)
         foreach (['ifs_', 'af_'] as $prefix) {
             $prefixedPath = __DIR__ . '/templates/' . $prefix . $filename;
-            if ($prefix === 'ifs_' && $filename === 'purchase_order.docx' && file_exists($prefixedPath)) {
+            if ($prefix === 'ifs_' && in_array($filename, ['purchase_order.docx', 'invoice.docx', 'proforma_invoice.docx']) && file_exists($prefixedPath)) {
                 echo "  [SKIP] " . $prefix . $filename . " (skipped to preserve user edits)\n";
                 continue;
             }

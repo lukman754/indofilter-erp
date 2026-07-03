@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { partners as api, companies as companiesApi } from '../../api/index.js'
 import { useAppStore } from '../../stores/app.js'
 import DataTable from '../../components/DataTable.vue'
@@ -19,6 +19,11 @@ const filterType = ref('')
 const filterCompany = ref('')
 
 const appStore = useAppStore()
+const router = useRouter()
+
+function showHistory(partner) {
+    router.push(`/partners/${partner.id}/history`)
+}
 
 const form = ref({ company_id: '', company_ids: [], type: 'customer', name: '', alias: '', address: '', phone: '', email: '', npwp: '', contact_person: '', bank_name: '', bank_account_name: '', bank_account_number: '' })
 
@@ -174,13 +179,19 @@ async function save() {
 }
 
 async function confirmDelete(id) {
-    if (!confirm('Yakin ingin menghapus data ini?')) return
-    try {
-        await api.delete(id)
-        await fetchData()
-    } catch (e) {
-        alert('Gagal menghapus data')
-    }
+    appStore.showConfirm(
+        'Hapus Partner',
+        'Yakin ingin menghapus data ini?',
+        async () => {
+            try {
+                await api.delete(id)
+                await fetchData()
+                appStore.showNotification('Sukses', 'Partner berhasil dihapus.', 'success')
+            } catch (e) {
+                appStore.showNotification('Gagal', 'Gagal menghapus data.', 'error')
+            }
+        }
+    )
 }
 
 const route = useRoute()
@@ -258,6 +269,11 @@ watch(() => route.query.search, (newVal) => {
                 </template>
                 <template #cell-actions="{ row }">
                     <div class="flex gap-2">
+                        <button @click="showHistory(row)" class="text-purple-600 hover:text-purple-800 transition-colors" title="Riwayat Surat">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                            </svg>
+                        </button>
                         <button @click="openEdit(row)" class="text-blue-600 hover:text-blue-800 transition-colors" title="Edit">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>

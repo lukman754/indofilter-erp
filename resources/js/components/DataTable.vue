@@ -34,7 +34,7 @@ defineProps({
                         </td>
                     </tr>
                     <tr v-for="(row, i) in data" :key="row.id || i" :class="i % 2 === 0 ? 'bg-white' : 'bg-gray-50'" class="hover:bg-blue-50 transition-colors">
-                        <td v-for="col in columns" :key="col.key" class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                        <td v-for="col in columns" :key="col.key" class="px-4 py-3 text-sm text-gray-700" :class="col.wrap || ['name', 'description', 'address'].includes(col.key) ? 'whitespace-normal min-w-[200px]' : 'whitespace-nowrap'">
                             <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
                                 {{ row[col.key] }}
                             </slot>

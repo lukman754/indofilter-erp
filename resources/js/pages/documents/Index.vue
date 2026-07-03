@@ -2,10 +2,12 @@
 import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { documents as api } from '../../api/index.js'
+import { useAppStore } from '../../stores/app.js'
 import DataTable from '../../components/DataTable.vue'
 
 const router = useRouter()
 const route = useRoute()
+const appStore = useAppStore()
 
 const items = ref([])
 const loading = ref(false)
@@ -84,84 +86,156 @@ async function fetchData() {
 
 watch([activeType, activeStatus], fetchData)
 
-watch(activeType, (newVal) => {
-    if (route.query.type !== (newVal || undefined)) {
-        router.replace({ query: { ...route.query, type: newVal || undefined } })
-    }
-})
+const poFileInput = ref(null);
+const currentUploadDocId = ref(null);
 
-watch(() => route.query.type, (newVal) => {
-    const val = newVal || ''
-    if (activeType.value !== val) {
-        activeType.value = val
+function triggerPoUpload(id) {
+    currentUploadDocId.value = id;
+    if (poFileInput.value) {
+        poFileInput.value.click();
     }
-})
+}
 
-async function handleConfirm(id) {
-    if (!confirm('Konfirmasi dokumen ini?')) return
-    const doc = documents.value.find(d => d.id === id)
-    let overwrite = false
-    if (doc && doc.document_number) {
-        try {
-            const checkRes = await api.checkLocalFile({ number: doc.document_number })
-            if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
-                if (!window.confirm(`Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
-                    return
-                }
-                overwrite = true
-            }
-        } catch (e) {
-            console.error("Gagal memeriksa berkas lokal", e)
-        }
+function showConfirm(title, message, onConfirm, onCancel = null) {
+    appStore.showConfirm(title, message, onConfirm, onCancel)
+}
+
+function showNotification(title, message, type = 'success') {
+    appStore.showNotification(title, message, type)
+}
+
+async function onPoFileSelected(e) {
+    const file = e.target.files[0];
+    if (!file || !currentUploadDocId.value) return;
+
+    const formData = new FormData();
+    formData.append('customer_po_file', file);
+
+    try {
+        await api.uploadPo(currentUploadDocId.value, formData);
+        showNotification('Sukses', 'File PO Customer berhasil diunggah!', 'success')
+        await fetchData();
+    } catch (err) {
+        showNotification('Gagal', 'Gagal mengunggah file PO: ' + (err.response?.data?.message || err.message), 'error')
+    } finally {
+        e.target.value = '';
+        currentUploadDocId.value = null;
     }
+}
+
+async function viewPoFile(id) {
+    try {
+        const response = await api.downloadPo(id);
+        const blob = new Blob([response.data], { type: response.headers['content-type'] });
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+    } catch (e) {
+        showNotification('Gagal Membuka PO', 'Gagal menampilkan file PO: ' + (e.response?.data?.message || e.message), 'error')
+    }
+}
+
+async function executeConfirm(id, overwrite) {
     try {
         await api.confirm(id, { overwrite })
         await fetchData()
+        showNotification('Sukses', 'Dokumen berhasil dikonfirmasi.', 'success')
     } catch (e) {
-        alert('Gagal mengkonfirmasi dokumen')
+        showNotification('Gagal', 'Gagal mengkonfirmasi dokumen.', 'error')
     }
+}
+
+async function handleConfirm(id) {
+    showConfirm(
+        'Konfirmasi Dokumen',
+        'Apakah Anda yakin ingin mengkonfirmasi dokumen ini?',
+        async () => {
+            const doc = documents.value.find(d => d.id === id)
+            let overwrite = false
+            if (doc && doc.document_number) {
+                try {
+                    const checkRes = await api.checkLocalFile({ number: doc.document_number })
+                    if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
+                        showConfirm(
+                            'Berkas Sudah Ada',
+                            `Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
+                            async () => {
+                                await executeConfirm(id, true)
+                            }
+                        )
+                        return
+                    }
+                } catch (e) {
+                    console.error("Gagal memeriksa berkas lokal", e)
+                }
+            }
+            await executeConfirm(id, false)
+        }
+    )
 }
 
 async function handleCancel(id) {
-    if (!confirm('Batalkan dokumen ini?')) return
-    try {
-        await api.cancel(id)
-        await fetchData()
-    } catch (e) {
-        alert('Gagal membatalkan dokumen')
-    }
+    showConfirm(
+        'Batalkan Dokumen',
+        'Apakah Anda yakin ingin membatalkan dokumen ini?',
+        async () => {
+            try {
+                await api.cancel(id)
+                await fetchData()
+                showNotification('Sukses', 'Dokumen berhasil dibatalkan.', 'success')
+            } catch (e) {
+                showNotification('Gagal', 'Gagal membatalkan dokumen.', 'error')
+            }
+        }
+    )
 }
 
 async function handleDelete(id) {
-    if (!confirm('Yakin ingin menghapus dokumen ini?')) return
-    try {
-        await api.delete(id)
-        await fetchData()
-    } catch (e) {
-        alert('Gagal menghapus dokumen')
-    }
+    showConfirm(
+        'Hapus Dokumen',
+        'Apakah Anda yakin ingin menghapus dokumen ini? Tindakan ini tidak dapat dibatalkan.',
+        async () => {
+            try {
+                await api.delete(id)
+                await fetchData()
+                showNotification('Sukses', 'Dokumen berhasil dihapus.', 'success')
+            } catch (e) {
+                showNotification('Gagal', 'Gagal menghapus dokumen.', 'error')
+            }
+        }
+    )
 }
 
 async function handleExport(id) {
     try {
-        let overwrite = false;
         let res = await api.export(id, { overwrite: false });
         
         if (res.data && res.data.exists) {
-            if (window.confirm(`Berkas "${res.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
-                res = await api.export(id, { overwrite: true });
-            } else {
-                return;
-            }
+            showConfirm(
+                'Berkas Sudah Ada',
+                `Berkas "${res.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
+                async () => {
+                    try {
+                        const overwriteRes = await api.export(id, { overwrite: true });
+                        if (overwriteRes.data && overwriteRes.data.success) {
+                            showNotification('Ekspor Berhasil', overwriteRes.data.message, 'success')
+                        } else {
+                            showNotification('Ekspor Gagal', overwriteRes.data.message || 'Gagal mengekspor dokumen', 'error')
+                        }
+                    } catch (err) {
+                        showNotification('Ekspor Gagal', err.response?.data?.message || 'Gagal mengekspor dokumen', 'error')
+                    }
+                }
+            )
+            return;
         }
         
         if (res.data && res.data.success) {
-            alert(res.data.message);
+            showNotification('Ekspor Berhasil', res.data.message, 'success')
         } else {
-            alert(res.data.message || 'Gagal mengekspor dokumen');
+            showNotification('Ekspor Gagal', res.data.message || 'Gagal mengekspor dokumen', 'error')
         }
     } catch (e) {
-        alert(e.response?.data?.message || 'Gagal mengekspor dokumen');
+        showNotification('Ekspor Gagal', e.response?.data?.message || 'Gagal mengekspor dokumen', 'error')
     }
 }
 
@@ -274,6 +348,29 @@ watch(() => route.query.search, (newVal) => {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                             </svg>
                         </button>
+                        <!-- View PO File -->
+                        <button
+                            v-if="(row.type === 'invoice' || row.type === 'proforma_invoice') && row.customer_po_file"
+                            @click="viewPoFile(row.id)"
+                            class="text-blue-500 hover:text-blue-700 transition-colors"
+                            title="Lihat File PO Customer"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        </button>
+                        <!-- Upload PO File -->
+                        <button
+                            v-if="row.type === 'invoice' || row.type === 'proforma_invoice'"
+                            @click="triggerPoUpload(row.id)"
+                            class="text-teal-600 hover:text-teal-800 transition-colors"
+                            title="Unggah File PO Customer"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                        </button>
                         <button @click="handleDelete(row.id)" class="text-red-500 hover:text-red-700 transition-colors" title="Hapus">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -282,6 +379,15 @@ watch(() => route.query.search, (newVal) => {
                     </div>
                 </template>
             </DataTable>
+            
+            <!-- Hidden file input for PO upload -->
+            <input
+                type="file"
+                ref="poFileInput"
+                style="display: none"
+                accept=".pdf,image/*"
+                @change="onPoFileSelected"
+            />
         </div>
     </div>
 </template>

@@ -6,6 +6,16 @@ export const useAppStore = defineStore('app', {
         activeCompanyId: localStorage.getItem('active_company_id') ? Number(localStorage.getItem('active_company_id')) : null,
         companies: [],
         sidebarCollapsed: false,
+        confirmModal: {
+            show: false,
+            title: '',
+            message: '',
+            onConfirm: null,
+            onCancel: null,
+            confirmText: 'OK',
+            cancelText: '',
+            type: 'success'
+        }
     }),
     actions: {
         setActiveCompany(id) {
@@ -35,5 +45,42 @@ export const useAppStore = defineStore('app', {
         toggleSidebar() {
             this.sidebarCollapsed = !this.sidebarCollapsed
         },
+        showConfirm(title, message, onConfirm, onCancel = null) {
+            this.confirmModal = {
+                show: true,
+                title,
+                message,
+                onConfirm,
+                onCancel,
+                confirmText: 'Ya',
+                cancelText: 'Batal',
+                type: 'confirm'
+            }
+        },
+        showNotification(title, message, type = 'success') {
+            this.confirmModal = {
+                show: true,
+                title,
+                message,
+                onConfirm: null,
+                onCancel: null,
+                confirmText: 'OK',
+                cancelText: '',
+                type
+            }
+        },
+        closeConfirmModal(confirmed) {
+            const { onConfirm, onCancel } = this.confirmModal
+            this.confirmModal.show = false
+            if (confirmed) {
+                if (typeof onConfirm === 'function') {
+                    onConfirm()
+                }
+            } else {
+                if (typeof onCancel === 'function') {
+                    onCancel()
+                }
+            }
+        }
     },
 })

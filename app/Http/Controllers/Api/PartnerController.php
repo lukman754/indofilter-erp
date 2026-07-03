@@ -45,7 +45,7 @@ class PartnerController extends Controller
 
     public function show(Partner $partner): JsonResponse
     {
-        return response()->json($partner);
+        return response()->json($partner->load('documents'));
     }
 
     public function update(Request $request, Partner $partner): JsonResponse

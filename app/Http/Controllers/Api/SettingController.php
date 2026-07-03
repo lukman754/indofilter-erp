@@ -21,6 +21,7 @@ class SettingController extends Controller
             'delivery_slip',
             'delivery_address',
             'purchase_order',
+            'po_masuk',
         ];
 
         $globalFolders = [];
@@ -71,6 +72,7 @@ class SettingController extends Controller
             'delivery_slip',
             'delivery_address',
             'purchase_order',
+            'po_masuk',
         ];
 
         if ($request->has('global_folders')) {

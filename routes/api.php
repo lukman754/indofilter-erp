@@ -24,6 +24,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/documents/generate-number', [DocumentController::class, 'generateNumber']);
     Route::post('/documents/parse-pdf', [DocumentController::class, 'parsePdf']);
     Route::apiResource('/documents', DocumentController::class);
+    Route::post('/documents/{document}/upload-po', [DocumentController::class, 'uploadPoFile']);
+    Route::get('/documents/{document}/download-po', [DocumentController::class, 'downloadPoFile']);
     Route::post('/documents/{document}/confirm', [DocumentController::class, 'confirm']);
     Route::post('/documents/{document}/cancel', [DocumentController::class, 'cancel']);
     Route::get('/documents/{id}/export', [DocumentController::class, 'exportDocx']);

@@ -13,6 +13,14 @@ const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 
+function showConfirm(title, message, onConfirm, onCancel = null) {
+    appStore.showConfirm(title, message, onConfirm, onCancel)
+}
+
+function showNotification(title, message, type = 'success') {
+    appStore.showNotification(title, message, type)
+}
+
 const isEdit = computed(() => !!route.params.id);
 const isLoaded = ref(!isEdit.value);
 const loading = ref(false);
@@ -73,13 +81,13 @@ function selectRefDocument(doc) {
     if (!isEdit.value) {
         handleCopyFromDocument();
     } else {
-        if (
-            confirm(
-                "Apakah Anda ingin menyalin data (barang, partner, dll.) dari dokumen referensi ini? Klik Batal jika hanya ingin menghubungkan referensi saja.",
-            )
-        ) {
-            handleCopyFromDocument();
-        }
+        showConfirm(
+            'Salin Referensi',
+            'Apakah Anda ingin menyalin data (barang, partner, dll.) dari dokumen referensi ini? Klik Batal jika hanya ingin menghubungkan referensi saja.',
+            () => {
+                handleCopyFromDocument();
+            }
+        )
     }
 }
 
@@ -125,7 +133,27 @@ const form = ref({
     recipient_pic: "",
     customer_po_number: "",
     customer_po_date: "",
+    customer_po_file: "",
 });
+
+const selectedPoFile = ref(null);
+function handlePoFileChange(e) {
+    const file = e.target.files[0];
+    if (file) {
+        selectedPoFile.value = file;
+    }
+}
+async function handleViewPoFile() {
+    if (!route.params.id) return;
+    try {
+        const response = await api.downloadPo(route.params.id);
+        const blob = new Blob([response.data], { type: response.headers['content-type'] });
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+    } catch (e) {
+        showNotification('Gagal Membuka PO', 'Gagal menampilkan file PO: ' + (e.response?.data?.message || e.message), 'error');
+    }
+}
 
 const quotationDefaults = {
     stock_conditions: "Ready Stock",
@@ -217,7 +245,7 @@ const handlePdfUpload = async (event) => {
             if (data.partner_id) {
                 form.value.partner_id = data.partner_id;
             } else if (data.partner_name) {
-                alert(`Partner "${data.partner_name}" tidak ditemukan di database. Silakan pilih partner secara manual.`);
+                showNotification('Partner Tidak Ditemukan', `Partner "${data.partner_name}" tidak ditemukan di database. Silakan pilih partner secara manual.`, 'warning');
             }
             
             if (data.document_number) form.value.number = data.document_number;
@@ -239,7 +267,7 @@ const handlePdfUpload = async (event) => {
                 }));
             }
             
-            alert("PDF berhasil dibaca! Data form telah diisi otomatis.");
+            showNotification('Analisis PDF Sukses', 'PDF berhasil dibaca! Data form telah diisi otomatis.', 'success');
         } else {
             error.value = res.data.message || "Gagal menganalisis PDF.";
         }
@@ -587,9 +615,9 @@ function terbilangJS(number) {
 }
 
 function spellNumber(number) {
-    if (!number || number === 0) return "Nol Rupiah";
+    if (!number || number === 0) return "NOL RUPIAH";
     const spelled = terbilangJS(number).trim();
-    return spelled.replace(/\b\w/g, (c) => c.toUpperCase()) + " Rupiah";
+    return (spelled + " rupiah").toUpperCase();
 }
 
 function onProductNameInput(item) {
@@ -647,11 +675,11 @@ function openAddPartnerModal() {
 
 async function handleSavePartner() {
     if (!partnerForm.value.name) {
-        alert("Nama partner wajib diisi!");
+        showNotification('Validasi', 'Nama partner wajib diisi!', 'warning');
         return;
     }
     if (!partnerForm.value.company_id) {
-        alert("Perusahaan harus dipilih terlebih dahulu di form utama!");
+        showNotification('Validasi', 'Perusahaan harus dipilih terlebih dahulu di form utama!', 'warning');
         return;
     }
     isSavingPartner.value = true;
@@ -674,9 +702,9 @@ async function handleSavePartner() {
         const errData = e.response?.data;
         if (errData?.errors) {
             const msgs = Object.values(errData.errors).flat();
-            alert("Gagal menambah partner: " + msgs.join("\n"));
+            showNotification('Gagal Tambah Partner', 'Gagal menambah partner: ' + msgs.join('\n'), 'error');
         } else {
-            alert(errData?.message || "Gagal menambah partner");
+            showNotification('Gagal Tambah Partner', errData?.message || 'Gagal menambah partner', 'error');
         }
     } finally {
         isSavingPartner.value = false;
@@ -719,6 +747,10 @@ async function handleCopyFromDocument() {
             doc.vendor_bank_account_name || "";
         form.value.vendor_bank_account_number =
             doc.vendor_bank_account_number || "";
+        form.value.due_date = doc.due_date ? doc.due_date.split("T")[0] : "";
+        form.value.customer_po_number = doc.customer_po_number || "";
+        form.value.customer_po_date = doc.customer_po_date ? doc.customer_po_date.split("T")[0] : "";
+        form.value.customer_po_file = doc.customer_po_file || "";
 
         form.value.items = (doc.items || []).map((i) => {
             const hasVars = i.variations && i.variations.length > 0;
@@ -803,6 +835,7 @@ async function loadDocument() {
             customer_po_date: doc.customer_po_date
                 ? doc.customer_po_date.split("T")[0]
                 : "",
+            customer_po_file: doc.customer_po_file || "",
         };
         if (doc.reference) {
             selectedRefDocumentId.value = doc.reference.id;
@@ -822,30 +855,8 @@ async function loadDocument() {
     }
 }
 
-async function handleSave(confirm = false) {
-    saving.value = true;
-    error.value = "";
+async function executeSave(confirm, overwrite) {
     try {
-        let overwrite = false;
-        if (confirm && form.value.number) {
-            try {
-                const checkRes = await api.checkLocalFile({ 
-                    number: form.value.number,
-                    company_id: form.value.company_id,
-                    type: form.value.type
-                });
-                if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
-                    if (!window.confirm(`Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`)) {
-                        saving.value = false;
-                        return;
-                    }
-                    overwrite = true;
-                }
-            } catch (e) {
-                console.error("Gagal memeriksa berkas lokal", e);
-            }
-        }
-
         const payload = {
             ...form.value,
             status: confirm ? "confirmed" : "draft",
@@ -877,11 +888,21 @@ async function handleSave(confirm = false) {
             })),
         };
 
+        let savedDocId = route.params.id;
         if (isEdit.value) {
             await api.update(route.params.id, payload);
         } else {
-            await api.create(payload);
+            const res = await api.create(payload);
+            const createdDoc = res.data.data || res.data;
+            savedDocId = createdDoc.id;
         }
+
+        if (selectedPoFile.value && savedDocId) {
+            const formData = new FormData();
+            formData.append('customer_po_file', selectedPoFile.value);
+            await api.uploadPo(savedDocId, formData);
+        }
+
         router.push({
             path: "/documents",
             query: { type: form.value.document_type },
@@ -899,20 +920,55 @@ async function handleSave(confirm = false) {
     }
 }
 
-async function handleDelete() {
-    if (!confirm("Yakin ingin menghapus dokumen ini?")) return;
+async function handleSave(confirm = false) {
     saving.value = true;
-    try {
-        await api.delete(route.params.id);
-        router.push({
-            path: "/documents",
-            query: { type: form.value.document_type },
-        });
-    } catch (e) {
-        error.value = e.response?.data?.message || "Gagal menghapus dokumen";
-    } finally {
-        saving.value = false;
+    error.value = "";
+    if (confirm && form.value.number) {
+        try {
+            const checkRes = await api.checkLocalFile({ 
+                number: form.value.number,
+                company_id: form.value.company_id,
+                type: form.value.type
+            });
+            if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
+                showConfirm(
+                    'Berkas Sudah Ada',
+                    `Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
+                    async () => {
+                        await executeSave(confirm, true);
+                    },
+                    () => {
+                        saving.value = false;
+                    }
+                )
+                return;
+            }
+        } catch (e) {
+            console.error("Gagal memeriksa berkas lokal", e);
+        }
     }
+    await executeSave(confirm, false);
+}
+
+async function handleDelete() {
+    showConfirm(
+        'Hapus Dokumen',
+        'Apakah Anda yakin ingin menghapus dokumen ini? Tindakan ini tidak dapat dibatalkan.',
+        async () => {
+            saving.value = true;
+            try {
+                await api.delete(route.params.id);
+                router.push({
+                    path: "/documents",
+                    query: { type: form.value.document_type },
+                });
+            } catch (e) {
+                error.value = e.response?.data?.message || "Gagal menghapus dokumen";
+            } finally {
+                saving.value = false;
+            }
+        }
+    )
 }
 
 watch(
@@ -1376,6 +1432,38 @@ onUnmounted(() => {
                                     id="cust-reff"
                                     placeholder="Customer Reff / No. PO..."
                                 />
+                            </div>
+                        </div>
+
+                        <!-- Customer PO File (For Invoice and Proforma Invoice) -->
+                        <div
+                            v-if="
+                                form.document_type === 'Invoice' ||
+                                form.document_type === 'Proforma Invoice'
+                            "
+                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
+                        >
+                            <label for="po-file" class="mb-0">File PO Customer</label>
+                            <div class="col-span-2 flex items-center gap-2">
+                                <input
+                                    type="file"
+                                    accept=".pdf,image/*"
+                                    class="flex-1 text-xs bg-transparent border-none outline-none cursor-pointer py-0.5"
+                                    id="po-file"
+                                    @change="handlePoFileChange"
+                                />
+                                <button
+                                    v-if="form.customer_po_file"
+                                    type="button"
+                                    @click="handleViewPoFile"
+                                    class="bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] px-2.5 py-1.5 rounded-lg border border-blue-200 font-semibold flex items-center gap-1 cursor-pointer transition-colors flex-shrink-0 whitespace-nowrap"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                    Lihat PO
+                                </button>
                             </div>
                         </div>
 
