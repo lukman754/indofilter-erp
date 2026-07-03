@@ -86,6 +86,14 @@ async function fetchData() {
 
 watch([activeType, activeStatus], fetchData)
 
+// Sync activeType with URL query parameter changes (e.g., when navigating via sidebar tabs)
+watch(() => route.query.type, (newVal) => {
+    const val = newVal || ''
+    if (activeType.value !== val) {
+        activeType.value = val
+    }
+})
+
 const poFileInput = ref(null);
 const currentUploadDocId = ref(null);
 
@@ -149,7 +157,7 @@ async function handleConfirm(id) {
         'Konfirmasi Dokumen',
         'Apakah Anda yakin ingin mengkonfirmasi dokumen ini?',
         async () => {
-            const doc = documents.value.find(d => d.id === id)
+            const doc = items.value.find(d => d.id === id)
             let overwrite = false
             if (doc && doc.document_number) {
                 try {

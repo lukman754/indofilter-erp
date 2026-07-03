@@ -142,7 +142,7 @@ class DocumentController extends Controller
 
     public function show(Document $document): JsonResponse
     {
-        $document->load(['partner', 'items', 'company', 'bankAccount', 'reference']);
+        $document->load(['partner', 'items', 'company', 'bankAccount', 'reference', 'referencedBy.partner']);
 
         return response()->json($document);
     }

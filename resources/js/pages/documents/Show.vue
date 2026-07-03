@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { documents as api } from '../../api/index.js'
 import { useAppStore } from '../../stores/app.js'
@@ -41,6 +41,13 @@ async function loadDocument() {
         loading.value = false
     }
 }
+
+// Reload when navigating between documents (same component, different :id)
+watch(() => route.params.id, (newId, oldId) => {
+    if (newId && newId !== oldId) {
+        loadDocument()
+    }
+})
 
 function showConfirm(title, message, onConfirm, onCancel = null) {
     appStore.showConfirm(title, message, onConfirm, onCancel)
@@ -455,6 +462,56 @@ onMounted(loadDocument)
                             <h4 class="text-[10px] font-medium text-gray-400">Offer Validity</h4>
                             <p class="text-sm text-gray-700 mt-0.5">{{ doc.offer_validity || '-' }}</p>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Dokumen Terkait (referencedBy) -->
+                <div v-if="doc.referenced_by && doc.referenced_by.length > 0" class="px-6 py-5 border-b border-gray-200">
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase mb-3 flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                        Digunakan sebagai referensi oleh
+                        <span class="ml-1 bg-indigo-100 text-indigo-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{{ doc.referenced_by.length }}</span>
+                    </h3>
+                    <div class="space-y-2">
+                        <router-link
+                            v-for="ref in doc.referenced_by"
+                            :key="ref.id"
+                            :to="{ path: '/documents/' + ref.id, query: { type: ref.document_type } }"
+                            class="flex items-center justify-between px-4 py-3 rounded-lg border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/40 transition-all group"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div class="w-7 h-7 rounded-md bg-indigo-50 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition-colors">
+                                    <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800 group-hover:text-indigo-700 transition-colors">
+                                        {{ ref.document_number || `Draft #${ref.id}` }}
+                                    </p>
+                                    <p class="text-xs text-gray-400 mt-0.5">
+                                        {{ ref.document_type }}
+                                        <span v-if="ref.partner?.name"> · {{ ref.partner.name }}</span>
+                                        <span v-if="ref.date"> · {{ formatDate(ref.date) }}</span>
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                <span
+                                    class="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                                    :class="{
+                                        'bg-gray-100 text-gray-500': ref.status === 'draft',
+                                        'bg-green-100 text-green-700': ref.status === 'confirmed',
+                                        'bg-red-100 text-red-600': ref.status === 'canceled',
+                                    }"
+                                >{{ ref.status }}</span>
+                                <svg class="w-4 h-4 text-gray-300 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </div>
+                        </router-link>
                     </div>
                 </div>
 
