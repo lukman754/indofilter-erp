@@ -40,6 +40,8 @@ const sidebarPaths = [
     '/companies',
     '/partners',
     '/products',
+    '/kas',
+    '/kas/summary',
     '/settings'
 ]
 

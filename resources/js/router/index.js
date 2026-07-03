@@ -71,6 +71,16 @@ const routes = [
                 name: 'settings',
                 component: () => import('../pages/settings/GoogleDrive.vue'),
             },
+            {
+                path: 'kas',
+                name: 'kas',
+                component: () => import('../pages/kas/Index.vue'),
+            },
+            {
+                path: 'kas/summary',
+                name: 'kas.summary',
+                component: () => import('../pages/kas/Summary.vue'),
+            },
         ],
     },
 ]

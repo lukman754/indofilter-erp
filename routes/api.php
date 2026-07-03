@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CashAccountController;
+use App\Http\Controllers\Api\CashTransactionController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DocumentController;
@@ -36,5 +38,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/global-search', [SearchController::class, 'globalSearch']);
 
     Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
+
+    // Kas
+    Route::apiResource('/cash-accounts', CashAccountController::class)->except(['show']);
+    Route::get('/cash-transactions/summary', [CashTransactionController::class, 'summary']);
+    Route::apiResource('/cash-transactions', CashTransactionController::class)->except(['show']);
 });
 

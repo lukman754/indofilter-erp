@@ -108,5 +108,22 @@ export const search = {
     globalSearch: (q) => api.get('/global-search', { params: { q } }),
 }
 
+export const kas = {
+    // Accounts
+    listAccounts:   ()         => api.get('/cash-accounts'),
+    createAccount:  (data)     => api.post('/cash-accounts', data),
+    updateAccount:  (id, data) => api.put(`/cash-accounts/${id}`, data),
+    deleteAccount:  (id)       => api.delete(`/cash-accounts/${id}`),
+
+    // Transactions
+    listTransactions: (params) => api.get('/cash-transactions', { params }),
+    createTransaction: (data)  => api.post('/cash-transactions', data),
+    updateTransaction: (id, data) => api.put(`/cash-transactions/${id}`, data),
+    deleteTransaction: (id)    => api.delete(`/cash-transactions/${id}`),
+
+    // Summary
+    summary: (params)          => api.get('/cash-transactions/summary', { params }),
+}
+
 export default api
 
