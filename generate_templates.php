@@ -76,11 +76,15 @@ class TemplateGenerator
     {
         $table = $section->addTable(['borderSize' => 0, 'cellMargin' => 30]);
 
-        $left = [ [$numberLabel, '${doc_number}'], ['Tanggal', '${doc_date}'] ];
-        if ($showDueDate) { $left[] = ['Jatuh Tempo', '${doc_due_date}']; }
+        $left = [[$numberLabel, '${doc_number}'], ['Tanggal', '${doc_date}']];
+        if ($showDueDate) {
+            $left[] = ['Jatuh Tempo', '${doc_due_date}'];
+        }
 
-        $right = [ ['Kepada', '${partner_name}'], ['Alamat', '${partner_address}'], ['Up.', '${partner_contact}'], ['Telp.', '${partner_phone}'] ];
-        if ($showPartnerNpwp) { $right[] = ['NPWP', '${partner_npwp}']; }
+        $right = [['Kepada', '${partner_name}'], ['Alamat', '${partner_address}'], ['Up.', '${partner_contact}'], ['Telp.', '${partner_phone}']];
+        if ($showPartnerNpwp) {
+            $right[] = ['NPWP', '${partner_npwp}'];
+        }
 
         $row = $table->addRow();
         $cl = $row->addCell(Converter::cmToTwip(6));
@@ -119,13 +123,20 @@ class TemplateGenerator
         $table->addRow();
         for ($i = 0; $i < count($headers); $i++) {
             $cell = $table->addCell(Converter::cmToTwip($widths[$i]));
-            if ($i == 0) $cell->addText('${no}', 'fTableCell', 'pCenter');
-            elseif ($i == 1) $cell->addText('${product_name}', 'fTableCell');
-            elseif ($i == 2) $cell->addText('${description}', 'fTableCell');
-            elseif ($i == 3) $cell->addText('${qty}', 'fTableCell', 'pCenter');
-            elseif ($i == 4) $cell->addText('${uom}', 'fTableCell', 'pCenter');
-            elseif ($i == 5) $cell->addText($showPrice ? '${unit_price}' : '${note}', 'fTableCell', 'pRight');
-            elseif ($i == 6) $cell->addText('${total}', 'fTableCell', 'pRight');
+            if ($i == 0)
+                $cell->addText('${no}', 'fTableCell', 'pCenter');
+            elseif ($i == 1)
+                $cell->addText('${product_name}', 'fTableCell');
+            elseif ($i == 2)
+                $cell->addText('${description}', 'fTableCell');
+            elseif ($i == 3)
+                $cell->addText('${qty}', 'fTableCell', 'pCenter');
+            elseif ($i == 4)
+                $cell->addText('${uom}', 'fTableCell', 'pCenter');
+            elseif ($i == 5)
+                $cell->addText($showPrice ? '${unit_price}' : '${note}', 'fTableCell', 'pRight');
+            elseif ($i == 6)
+                $cell->addText('${total}', 'fTableCell', 'pRight');
         }
     }
 
@@ -144,7 +155,8 @@ class TemplateGenerator
         // Right Cell: Totals Table
         $cRight = $row->addCell(Converter::cmToTwip(8.0), ['valign' => 'top']);
         $totalsTable = $cRight->addTable(['borderSize' => 0, 'cellMargin' => 40, 'alignment' => Jc::END]);
-        $lW = Converter::cmToTwip(4.5); $vW = Converter::cmToTwip(3.5);
+        $lW = Converter::cmToTwip(4.5);
+        $vW = Converter::cmToTwip(3.5);
 
         $rows = [
             ['Subtotal', '${subtotal}'],
@@ -195,7 +207,7 @@ class TemplateGenerator
 
         $cl = $row->addCell(Converter::cmToTwip(17.5));
         $cl->addText('KETENTUAN PENAWARAN', 'fLabel', 'pLeft');
-        
+
         $tr1 = $cl->addTextRun(['spaceAfter' => 20]);
         $tr1->addText('Kondisi Stok: ', 'fSmallBold');
         $tr1->addText('${stock_conditions}', 'fSmall');
@@ -250,7 +262,7 @@ class TemplateGenerator
 
         // Pengirim Section
         $tablePengirim = $section->addTable(['borderSize' => 0, 'cellMargin' => 40]);
-        
+
         $row = $tablePengirim->addRow();
         $row->addCell(Converter::cmToTwip(2.5))->addText('Pengirim', 'fAddressLabel');
         $row->addCell(Converter::cmToTwip(0.5))->addText(':', 'fAddressLabel');
@@ -294,8 +306,10 @@ class TemplateGenerator
     public function generateQuotation(): void
     {
         $section = $this->phpWord->addSection([
-            'marginTop' => Converter::cmToTwip(1.5), 'marginBottom' => Converter::cmToTwip(1.5),
-            'marginLeft' => Converter::cmToTwip(2), 'marginRight' => Converter::cmToTwip(2),
+            'marginTop' => Converter::cmToTwip(1.5),
+            'marginBottom' => Converter::cmToTwip(1.5),
+            'marginLeft' => Converter::cmToTwip(2),
+            'marginRight' => Converter::cmToTwip(2),
         ]);
         $this->addHeader($section, 'QUOTATION');
         $this->addDocInfo($section, 'No. Quotation', true, true);
@@ -314,8 +328,10 @@ class TemplateGenerator
     public function generateProformaInvoice(): void
     {
         $section = $this->phpWord->addSection([
-            'marginTop' => Converter::cmToTwip(1.5), 'marginBottom' => Converter::cmToTwip(1.5),
-            'marginLeft' => Converter::cmToTwip(2), 'marginRight' => Converter::cmToTwip(2),
+            'marginTop' => Converter::cmToTwip(1.5),
+            'marginBottom' => Converter::cmToTwip(1.5),
+            'marginLeft' => Converter::cmToTwip(2),
+            'marginRight' => Converter::cmToTwip(2),
         ]);
         $this->addHeader($section, 'PROFORMA INVOICE');
         $this->addDocInfo($section, 'No. Proforma', true, true);
@@ -336,8 +352,10 @@ class TemplateGenerator
     public function generateInvoice(): void
     {
         $section = $this->phpWord->addSection([
-            'marginTop' => Converter::cmToTwip(1.5), 'marginBottom' => Converter::cmToTwip(1.5),
-            'marginLeft' => Converter::cmToTwip(2), 'marginRight' => Converter::cmToTwip(2),
+            'marginTop' => Converter::cmToTwip(1.5),
+            'marginBottom' => Converter::cmToTwip(1.5),
+            'marginLeft' => Converter::cmToTwip(2),
+            'marginRight' => Converter::cmToTwip(2),
         ]);
         $this->addHeader($section, 'INVOICE');
         $this->addDocInfo($section, 'No. Invoice', true, true);
@@ -358,8 +376,10 @@ class TemplateGenerator
     public function generateDeliverySlip(): void
     {
         $section = $this->phpWord->addSection([
-            'marginTop' => Converter::cmToTwip(1.5), 'marginBottom' => Converter::cmToTwip(1.5),
-            'marginLeft' => Converter::cmToTwip(2), 'marginRight' => Converter::cmToTwip(2),
+            'marginTop' => Converter::cmToTwip(1.5),
+            'marginBottom' => Converter::cmToTwip(1.5),
+            'marginLeft' => Converter::cmToTwip(2),
+            'marginRight' => Converter::cmToTwip(2),
         ]);
         $this->addHeader($section, 'SURAT JALAN');
         $this->addDocInfo($section, 'No. Surat Jalan', false, false);
@@ -403,8 +423,12 @@ class TemplateGenerator
     public function generateDeliveryAddress(): void
     {
         $section = $this->phpWord->addSection([
-            'marginTop' => Converter::cmToTwip(2), 'marginBottom' => Converter::cmToTwip(2),
-            'marginLeft' => Converter::cmToTwip(2), 'marginRight' => Converter::cmToTwip(2),
+            'pageSizeW' => Converter::cmToTwip(23),
+            'pageSizeH' => Converter::cmToTwip(11),
+            'marginTop' => Converter::cmToTwip(1.5),
+            'marginBottom' => Converter::cmToTwip(1.5),
+            'marginLeft' => Converter::cmToTwip(1.5),
+            'marginRight' => Converter::cmToTwip(1.5),
         ]);
 
         $this->addDeliveryInfo($section);
@@ -414,8 +438,10 @@ class TemplateGenerator
     public function generatePurchaseOrder(): void
     {
         $section = $this->phpWord->addSection([
-            'marginTop' => Converter::cmToTwip(1.5), 'marginBottom' => Converter::cmToTwip(1.5),
-            'marginLeft' => Converter::cmToTwip(2), 'marginRight' => Converter::cmToTwip(2),
+            'marginTop' => Converter::cmToTwip(1.5),
+            'marginBottom' => Converter::cmToTwip(1.5),
+            'marginLeft' => Converter::cmToTwip(2),
+            'marginRight' => Converter::cmToTwip(2),
         ]);
         $this->addHeader($section, 'PURCHASE ORDER');
         $this->addDocInfo($section, 'No. PO', true, false);
@@ -502,7 +528,9 @@ class TemplateGenerator
 echo "Indofilter ERP - DOCX Template Generator\n";
 echo str_repeat('=', 45) . "\n\n";
 
-if (!is_dir(__DIR__ . '/resources')) { mkdir(__DIR__ . '/resources', 0777, true); }
+if (!is_dir(__DIR__ . '/resources')) {
+    mkdir(__DIR__ . '/resources', 0777, true);
+}
 $ph = __DIR__ . '/resources/logo_placeholder.png';
 if (!file_exists($ph)) {
     file_put_contents($ph, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='));

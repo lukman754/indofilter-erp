@@ -1,77 +1,86 @@
 <script setup>
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
-import { dashboard, documents as docsApi } from "../api/index.js";
+import { dashboard } from "../api/index.js";
 import { useAppStore } from "../stores/app.js";
 
 const router = useRouter();
 const appStore = useAppStore();
 const stats = ref(null);
-const docs = ref([]);
 const loading = ref(true);
-const showDropdown = ref(false);
-
-// Filter states
-const search = ref("");
-const activeType = ref("");
-const activeStatus = ref("");
-const currentPage = ref(1);
-const perPage = ref(10);
-
-const statCards = [
-    {
-        key: "quotation",
-        label: "Quotations",
-        icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-    },
-    {
-        key: "invoice",
-        label: "Invoice",
-        icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
-    },
-    {
-        key: "delivery_slip",
-        label: "Surat Jalan",
-        icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
-    },
-    {
-        key: "purchase_order",
-        label: "Purchase Order",
-        icon: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z",
-    },
-];
+const period = ref("month");
 
 const documentTypesList = [
-    { type: "Quotation", label: "Quotation" },
-    { type: "Proforma Invoice", label: "Proforma Invoice" },
-    { type: "Invoice", label: "Invoice" },
-    { type: "Delivery Slip", label: "Delivery Slip" },
-    { type: "Delivery Address", label: "Delivery Address" },
-    { type: "Purchase Order", label: "Purchase Order" },
-];
-
-const filterTypes = [
-    { value: "", label: "Semua Tipe" },
-    { value: "Quotation", label: "Quotation" },
-    { value: "Proforma Invoice", label: "Proforma Invoice" },
-    { value: "Invoice", label: "Invoice" },
-    { value: "Delivery Slip", label: "Surat Jalan" },
-    { value: "Delivery Address", label: "Alamat Kirim" },
-    { value: "Purchase Order", label: "Purchase Order" },
-];
-
-const statuses = [
-    { value: "", label: "Semua Status" },
-    { value: "draft", label: "Draft" },
-    { value: "confirmed", label: "Confirmed" },
-    { value: "canceled", label: "Canceled" },
+    {
+        type: "Quotation",
+        label: "Quotation",
+        icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+        color: "bg-blue-50 text-blue-600",
+    },
+    {
+        type: "Proforma Invoice",
+        label: "Proforma Invoice",
+        icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
+        color: "bg-violet-50 text-violet-600",
+    },
+    {
+        type: "Invoice",
+        label: "Invoice",
+        icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
+        color: "bg-emerald-50 text-emerald-600",
+    },
+    {
+        type: "Delivery Slip",
+        label: "Surat Jalan",
+        icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+        color: "bg-amber-50 text-amber-600",
+    },
+    {
+        type: "Delivery Address",
+        label: "Alamat Surat",
+        icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z",
+        color: "bg-rose-50 text-rose-600",
+    },
+    {
+        type: "Purchase Order",
+        label: "Purchase Order",
+        icon: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z",
+        color: "bg-teal-50 text-teal-600",
+    },
 ];
 
 const statusColors = {
-    draft: "bg-gray-100 text-gray-600",
-    confirmed: "bg-green-100 text-green-700",
-    canceled: "bg-red-100 text-red-600",
+    draft: "bg-slate-100 text-slate-700",
+    confirmed: "bg-emerald-50 text-emerald-700",
+    canceled: "bg-rose-50 text-rose-700",
 };
+
+const typeLabels = {
+    quotation: "Quotation",
+    proforma_invoice: "Proforma Invoice",
+    invoice: "Invoice",
+    delivery_slip: "Surat Jalan",
+    delivery_address: "Alamat Surat",
+    purchase_order: "Purchase Order",
+};
+
+function formatMoney(n) {
+    if (n >= 1000000000) return "Rp " + (n / 1000000000).toFixed(1) + " M";
+    if (n >= 1000000) return "Rp " + (n / 1000000).toFixed(1) + " Jt";
+    return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+    }).format(n || 0);
+}
+
+function formatMoneyFull(n) {
+    return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+    }).format(n || 0);
+}
 
 function formatDate(d) {
     if (!d) return "-";
@@ -82,26 +91,34 @@ function formatDate(d) {
     });
 }
 
-function formatMoney(n) {
-    return new Intl.NumberFormat("id-ID", {
-        style: "currency",
-        currency: "IDR",
-        minimumFractionDigits: 0,
-    }).format(n || 0);
+function formatRelativeDate(d) {
+    if (!d) return "";
+    const now = new Date();
+    const date = new Date(d);
+    const diff = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+    if (diff === 0) return "Hari ini";
+    if (diff === 1) return "Kemarin";
+    if (diff < 7) return `${diff} hari lalu`;
+    return formatDate(d);
 }
+
+const docTypeCount = computed(() => {
+    if (!stats.value) return 0;
+    return documentTypesList.reduce(
+        (sum, dt) =>
+            sum +
+            (stats.value?.[dt.type.toLowerCase().replace(/ /g, "_")] || 0),
+        0,
+    );
+});
 
 async function fetchDashboard() {
     loading.value = true;
     try {
-        const [statsRes, docsRes] = await Promise.all([
-            dashboard.stats(),
-            docsApi.list(),
-        ]);
-        stats.value = statsRes.data;
-        docs.value = docsRes.data.data || docsRes.data || [];
+        const res = await dashboard.stats({ period: period.value });
+        stats.value = res.data;
     } catch (e) {
         stats.value = {};
-        docs.value = [];
     } finally {
         loading.value = false;
     }
@@ -109,210 +126,79 @@ async function fetchDashboard() {
 
 function selectCreateType(type) {
     router.push({ path: "/documents/create", query: { type } });
-    showDropdown.value = false;
-}
-
-// Filtering logic
-const filteredDocs = computed(() => {
-    let result = docs.value;
-    if (search.value) {
-        const s = search.value.toLowerCase();
-        result = result.filter(
-            (r) =>
-                r.number?.toLowerCase().includes(s) ||
-                r.partner?.name?.toLowerCase().includes(s),
-        );
-    }
-    if (activeType.value) {
-        result = result.filter((r) => r.document_type === activeType.value);
-    }
-    if (activeStatus.value) {
-        result = result.filter((r) => r.status === activeStatus.value);
-    }
-    return result;
-});
-
-// Pagination logic
-const totalPages = computed(() => {
-    return Math.ceil(filteredDocs.value.length / perPage.value) || 1;
-});
-
-const paginatedDocs = computed(() => {
-    const start = (currentPage.value - 1) * perPage.value;
-    const end = start + perPage.value;
-    return filteredDocs.value.slice(start, end);
-});
-
-watch([search, activeType, activeStatus], () => {
-    currentPage.value = 1;
-});
-
-function showConfirm(title, message, onConfirm, onCancel = null) {
-    appStore.showConfirm(title, message, onConfirm, onCancel)
-}
-
-function showNotification(title, message, type = 'success') {
-    appStore.showNotification(title, message, type)
-}
-
-// Action handlers
-async function executeConfirm(id, overwrite) {
-    try {
-        await docsApi.confirm(id, { overwrite });
-        await fetchDashboard();
-        showNotification('Sukses', 'Dokumen berhasil dikonfirmasi.', 'success')
-    } catch (e) {
-        showNotification('Gagal', 'Gagal mengkonfirmasi dokumen.', 'error')
-    }
-}
-
-async function handleConfirm(id) {
-    showConfirm(
-        'Konfirmasi Dokumen',
-        'Apakah Anda yakin ingin mengkonfirmasi dokumen ini?',
-        async () => {
-            const doc = docs.value.find(d => d.id === id);
-            let overwrite = false;
-            if (doc && (doc.document_number || doc.number)) {
-                try {
-                    const docNum = doc.document_number || doc.number;
-                    const checkRes = await docsApi.checkLocalFile({ number: docNum });
-                    if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
-                        showConfirm(
-                            'Berkas Sudah Ada',
-                            `Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
-                            async () => {
-                                await executeConfirm(id, true)
-                            }
-                        )
-                        return;
-                    }
-                } catch (e) {
-                    console.error("Gagal memeriksa berkas lokal", e);
-                }
-            }
-            await executeConfirm(id, false);
-        }
-    )
-}
-
-async function handleCancel(id) {
-    showConfirm(
-        'Batalkan Dokumen',
-        'Apakah Anda yakin ingin membatalkan dokumen ini?',
-        async () => {
-            try {
-                await docsApi.cancel(id);
-                await fetchDashboard();
-                showNotification('Sukses', 'Dokumen berhasil dibatalkan.', 'success')
-            } catch (e) {
-                showNotification('Gagal', 'Gagal membatalkan dokumen.', 'error')
-            }
-        }
-    )
-}
-
-async function handleDelete(id) {
-    showConfirm(
-        'Hapus Dokumen',
-        'Apakah Anda yakin ingin menghapus dokumen ini? Tindakan ini tidak dapat dibatalkan.',
-        async () => {
-            try {
-                await docsApi.delete(id);
-                await fetchDashboard();
-                showNotification('Sukses', 'Dokumen berhasil dihapus.', 'success')
-            } catch (e) {
-                showNotification('Gagal', 'Gagal menghapus dokumen.', 'error')
-            }
-        }
-    )
-}
-
-async function handleExport(id) {
-    try {
-        let res = await docsApi.export(id, { overwrite: false });
-        
-        if (res.data && res.data.exists) {
-            showConfirm(
-                'Berkas Sudah Ada',
-                `Berkas "${res.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
-                async () => {
-                    try {
-                        const overwriteRes = await docsApi.export(id, { overwrite: true });
-                        if (overwriteRes.data && overwriteRes.data.success) {
-                            showNotification('Ekspor Berhasil', overwriteRes.data.message, 'success')
-                        } else {
-                            showNotification('Ekspor Gagal', overwriteRes.data.message || 'Gagal mengekspor dokumen', 'error')
-                        }
-                    } catch (err) {
-                        showNotification('Ekspor Gagal', err.response?.data?.message || 'Gagal mengekspor dokumen', 'error')
-                    }
-                }
-            )
-            return;
-        }
-        
-        if (res.data && res.data.success) {
-            showNotification('Ekspor Berhasil', res.data.message, 'success')
-        } else {
-            showNotification('Ekspor Gagal', res.data.message || 'Gagal mengekspor dokumen', 'error')
-        }
-    } catch (e) {
-        showNotification('Ekspor Gagal', e.response?.data?.message || 'Gagal mengekspor dokumen', 'error')
-    }
 }
 
 onMounted(fetchDashboard);
 </script>
 
 <template>
-    <div>
-        <div v-if="loading" class="flex items-center justify-center py-20">
-            <svg
-                class="animate-spin h-8 w-8 text-indofilter"
-                fill="none"
-                viewBox="0 0 24 24"
+    <div class="space-y-5">
+        <div
+            v-if="loading"
+            class="flex min-h-[420px] items-center justify-center"
+        >
+            <div
+                class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm"
             >
-                <circle
-                    class="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    stroke-width="4"
-                ></circle>
-                <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-            </svg>
+                <svg
+                    class="h-4 w-4 animate-spin text-indofilter"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                >
+                    <circle
+                        class="opacity-20"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="4"
+                    ></circle>
+                    <path
+                        class="opacity-80"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    ></path>
+                </svg>
+                Memuat dashboard
+            </div>
         </div>
 
-        <template v-if="!loading">
-            <!-- Stats Cards -->
-            <div
-                class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
+        <template v-if="!loading && stats">
+            <!-- Header -->
+            <section
+                class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
             >
                 <div
-                    v-for="card in statCards"
-                    :key="card.key"
-                    class="bg-white rounded-lg border border-gray-200 p-5 hover:shadow-md transition-shadow"
+                    class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-sm text-gray-500 font-medium">
-                                {{ card.label }}
-                            </p>
-                            <p class="text-2xl font-bold text-gray-800 mt-1">
-                                {{ stats?.[card.key] || 0 }}
-                            </p>
-                        </div>
-                        <div
-                            class="w-12 h-12 rounded-lg bg-blue-50 flex items-center justify-center"
+                    <div>
+                        <p
+                            class="text-xs font-semibold uppercase text-slate-400"
+                        >
+                            Dashboard
+                        </p>
+                        <h1 class="mt-1 text-xl font-bold text-slate-950">
+                            Ringkasan Operasional
+                        </h1>
+                        <p class="mt-1 text-sm text-slate-500">
+                            Data per
+                            {{
+                                new Date().toLocaleDateString("id-ID", {
+                                    weekday: "long",
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                })
+                            }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button
+                            @click="router.push('/documents')"
+                            class="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                         >
                             <svg
-                                class="w-6 h-6 text-indofilter"
+                                class="h-3.5 w-3.5"
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -321,454 +207,677 @@ onMounted(fetchDashboard);
                                     stroke-linecap="round"
                                     stroke-linejoin="round"
                                     stroke-width="2"
-                                    :d="card.icon"
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                ></path>
+                            </svg>
+                            Semua Dokumen
+                        </button>
+                        <router-link
+                            to="/partners"
+                            class="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                        >
+                            <svg
+                                class="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                                ></path>
+                            </svg>
+                            Partner
+                        </router-link>
+                        <router-link
+                            to="/products"
+                            class="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                        >
+                            <svg
+                                class="h-3.5 w-3.5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                ></path>
+                            </svg>
+                            Produk
+                        </router-link>
+                        <div class="h-5 w-px bg-slate-200"></div>
+                        <div class="relative">
+                            <button
+                                @click="
+                                    router.push({
+                                        path: '/documents/create',
+                                        query: { type: 'Quotation' },
+                                    })
+                                "
+                                class="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-950 px-3.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
+                            >
+                                <svg
+                                    class="h-3.5 w-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M12 4v16m8-8H4"
+                                    ></path>
+                                </svg>
+                                Buat Dokumen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- KPI Cards -->
+            <section class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div
+                    class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                    <div class="flex items-center justify-between">
+                        <p
+                            class="text-xs font-semibold uppercase text-slate-400"
+                        >
+                            Total Dokumen
+                        </p>
+                        <div
+                            class="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100"
+                        >
+                            <svg
+                                class="h-4 w-4 text-slate-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                                 ></path>
                             </svg>
                         </div>
                     </div>
+                    <p class="mt-3 text-2xl font-bold text-slate-950">
+                        {{ stats.total_all || 0 }}
+                    </p>
+                    <p class="mt-1 text-[11px] text-slate-400">Bulan ini</p>
+                </div>
+                <div
+                    class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                    <div class="flex items-center justify-between">
+                        <p
+                            class="text-xs font-semibold uppercase text-slate-400"
+                        >
+                            Revenue Invoice
+                        </p>
+                        <div
+                            class="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50"
+                        >
+                            <svg
+                                class="h-4 w-4 text-emerald-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                ></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="mt-3 text-2xl font-bold text-slate-950">
+                        {{ formatMoney(stats.month_revenue) }}
+                    </p>
+                    <p class="mt-1 text-[11px] text-slate-400">
+                        Invoice terkonfirmasi bulan ini
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                    <div class="flex items-center justify-between">
+                        <p
+                            class="text-xs font-semibold uppercase text-slate-400"
+                        >
+                            Perlu Diproses
+                        </p>
+                        <div
+                            class="flex h-8 w-8 items-center justify-center rounded-md bg-amber-50"
+                        >
+                            <svg
+                                class="h-4 w-4 text-amber-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                ></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="mt-3 text-2xl font-bold text-slate-950">
+                        {{ stats.draft || 0 }}
+                    </p>
+                    <p class="mt-1 text-[11px] text-slate-400">
+                        Dokumen draft aktif
+                    </p>
+                </div>
+                <div
+                    class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                    <div class="flex items-center justify-between">
+                        <p
+                            class="text-xs font-semibold uppercase text-slate-400"
+                        >
+                            Total Revenue
+                        </p>
+                        <div
+                            class="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-50"
+                        >
+                            <svg
+                                class="h-4 w-4 text-indigo-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                                ></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="mt-3 text-2xl font-bold text-slate-950">
+                        {{ formatMoney(stats.all_time_revenue) }}
+                    </p>
+                    <p class="mt-1 text-[11px] text-slate-400">
+                        {{ stats.all_time_invoice || 0 }} invoice sepanjang masa
+                    </p>
+                </div>
+            </section>
+
+            <div class="grid grid-cols-1 gap-5 xl:grid-cols-3">
+                <!-- Left: Document types + Trend -->
+                <div class="space-y-5 xl:col-span-2">
+                    <!-- Document type cards -->
+                    <section
+                        class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-sm font-semibold text-slate-950">
+                                Dokumen Bulan Ini
+                            </h2>
+                            <router-link
+                                to="/documents"
+                                class="text-xs font-semibold text-indofilter hover:underline"
+                                >Lihat Semua</router-link
+                            >
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            <button
+                                v-for="dt in documentTypesList"
+                                :key="dt.type"
+                                @click="
+                                    router.push({
+                                        path: '/documents',
+                                        query: { type: dt.type },
+                                    })
+                                "
+                                class="group flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3 text-left transition-colors hover:border-slate-200 hover:bg-white"
+                            >
+                                <div
+                                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                                    :class="dt.color"
+                                >
+                                    <svg
+                                        class="h-5 w-5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            :d="dt.icon"
+                                        ></path>
+                                    </svg>
+                                </div>
+                                <div class="min-w-0">
+                                    <p
+                                        class="text-xs font-medium text-slate-500 truncate"
+                                    >
+                                        {{ dt.label }}
+                                    </p>
+                                    <p class="text-lg font-bold text-slate-950">
+                                        {{
+                                            stats?.[
+                                                dt.type
+                                                    .toLowerCase()
+                                                    .replace(/ /g, "_")
+                                            ] || 0
+                                        }}
+                                    </p>
+                                </div>
+                            </button>
+                        </div>
+                    </section>
+
+                    <!-- Monthly Trend -->
+                    <section
+                        class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                        <h2 class="text-sm font-semibold text-slate-950 mb-4">
+                            Tren 6 Bulan Terakhir
+                        </h2>
+                        <div
+                            class="flex items-end gap-1.5"
+                            style="height: 120px"
+                        >
+                            <div
+                                v-for="(item, idx) in stats.monthly_trend || []"
+                                :key="idx"
+                                class="group relative flex-1"
+                                style="height: 100%"
+                            >
+                                <div
+                                    class="absolute bottom-0 w-full flex flex-col items-center gap-1"
+                                >
+                                    <div
+                                        class="w-full rounded-t transition-colors"
+                                        :class="
+                                            idx ===
+                                            stats.monthly_trend?.length - 1
+                                                ? 'bg-slate-950'
+                                                : 'bg-slate-200 group-hover:bg-slate-300'
+                                        "
+                                        :style="{
+                                            height:
+                                                Math.max(
+                                                    4,
+                                                    (item.count /
+                                                        Math.max(
+                                                            ...stats.monthly_trend.map(
+                                                                (i) => i.count,
+                                                            ),
+                                                            1,
+                                                        )) *
+                                                        80,
+                                                ) + 'px',
+                                        }"
+                                    ></div>
+                                    <span
+                                        class="text-[9px] font-medium text-slate-400"
+                                        >{{ item.month?.split(" ")[0] }}</span
+                                    >
+                                </div>
+                                <div
+                                    class="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white opacity-0 shadow transition-opacity group-hover:opacity-100 pointer-events-none"
+                                >
+                                    {{ item.count }} dokumen ·
+                                    {{ formatMoney(item.revenue) }}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Right: Pending + Quick Actions -->
+                <div class="space-y-5">
+                    <!-- Pending Documents -->
+                    <section
+                        class="rounded-lg border border-slate-200 bg-white shadow-sm"
+                    >
+                        <div class="border-b border-slate-100 px-5 py-3">
+                            <div class="flex items-center justify-between">
+                                <h2
+                                    class="text-sm font-semibold text-slate-950"
+                                >
+                                    Perlu Diproses
+                                </h2>
+                                <span
+                                    class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
+                                    >{{ stats.draft || 0 }}</span
+                                >
+                            </div>
+                        </div>
+                        <div class="divide-y divide-slate-100">
+                            <div
+                                v-if="!stats.pending_documents?.length"
+                                class="px-5 py-8 text-center"
+                            >
+                                <svg
+                                    class="mx-auto h-8 w-8 text-slate-300"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="1.5"
+                                        d="M5 13l4 4L19 7"
+                                    ></path>
+                                </svg>
+                                <p
+                                    class="mt-2 text-xs font-medium text-slate-500"
+                                >
+                                    Semua dokumen sudah diproses
+                                </p>
+                            </div>
+                            <router-link
+                                v-for="doc in stats.pending_documents"
+                                :key="doc.id"
+                                :to="{
+                                    path: '/documents/' + doc.id + '/edit',
+                                    query: { type: doc.type },
+                                }"
+                                class="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-slate-50"
+                            >
+                                <div class="min-w-0 flex-1">
+                                    <p
+                                        class="text-xs font-semibold text-slate-900 truncate"
+                                    >
+                                        {{
+                                            doc.document_number ||
+                                            `Draft #${doc.id}`
+                                        }}
+                                    </p>
+                                    <p class="text-[11px] text-slate-400">
+                                        {{ doc.partner?.name || "-" }} ·
+                                        {{ formatRelativeDate(doc.date) }}
+                                    </p>
+                                </div>
+                                <span
+                                    class="text-xs font-semibold text-slate-900"
+                                    >{{ formatMoney(doc.grand_total) }}</span
+                                >
+                            </router-link>
+                        </div>
+                        <div
+                            v-if="stats.pending_documents?.length"
+                            class="border-t border-slate-100 px-5 py-2.5"
+                        >
+                            <router-link
+                                to="/documents"
+                                class="text-[11px] font-semibold text-indofilter hover:underline"
+                                >Lihat semua draft</router-link
+                            >
+                        </div>
+                    </section>
+
+                    <!-- Quick Actions -->
+                    <section
+                        class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                        <h2 class="text-sm font-semibold text-slate-950 mb-3">
+                            Aksi Cepat
+                        </h2>
+                        <div class="space-y-1.5">
+                            <button
+                                v-for="dt in documentTypesList.slice(0, 4)"
+                                :key="dt.type"
+                                @click="selectCreateType(dt.type)"
+                                class="flex w-full items-center gap-3 rounded-lg border border-slate-100 px-3 py-2.5 text-left transition-colors hover:border-slate-200 hover:bg-slate-50"
+                            >
+                                <div
+                                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
+                                    :class="dt.color"
+                                >
+                                    <svg
+                                        class="h-4 w-4"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            :d="dt.icon"
+                                        ></path>
+                                    </svg>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <p
+                                        class="text-xs font-semibold text-slate-700"
+                                    >
+                                        {{ dt.label }}
+                                    </p>
+                                </div>
+                                <svg
+                                    class="h-3.5 w-3.5 text-slate-300"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M9 5l7 7-7 7"
+                                    ></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </section>
+
+                    <!-- Financial Summary -->
+                    <section
+                        class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                        <h2 class="text-sm font-semibold text-slate-950 mb-3">
+                            Ringkasan Keuangan
+                        </h2>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-slate-500"
+                                    >Nilai Quotation</span
+                                >
+                                <span
+                                    class="text-xs font-semibold text-slate-700"
+                                    >{{
+                                        formatMoneyFull(
+                                            stats.month_quotation_value,
+                                        )
+                                    }}</span
+                                >
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-slate-500"
+                                    >Nilai Invoice</span
+                                >
+                                <span
+                                    class="text-xs font-semibold text-slate-700"
+                                    >{{
+                                        formatMoneyFull(
+                                            stats.month_invoice_value,
+                                        )
+                                    }}</span
+                                >
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-slate-500"
+                                    >Total DP</span
+                                >
+                                <span
+                                    class="text-xs font-semibold text-slate-700"
+                                    >{{
+                                        formatMoneyFull(stats.month_dp_total)
+                                    }}</span
+                                >
+                            </div>
+                            <div class="h-px bg-slate-100"></div>
+                            <div class="flex items-center justify-between">
+                                <span
+                                    class="text-xs font-semibold text-slate-700"
+                                    >Revenue Bulan Ini</span
+                                >
+                                <span
+                                    class="text-xs font-bold text-slate-950"
+                                    >{{
+                                        formatMoneyFull(stats.month_revenue)
+                                    }}</span
+                                >
+                            </div>
+                        </div>
+                    </section>
                 </div>
             </div>
 
-            <!-- Quick Actions (Dropdown Button) -->
-            <div class="relative inline-block mb-6">
-                <!-- Dropdown Backdrop to close click outside -->
-                <div
-                    v-if="showDropdown"
-                    @click="showDropdown = false"
-                    class="fixed inset-0 z-10"
-                ></div>
-
-                <button
-                    @click="showDropdown = !showDropdown"
-                    class="relative z-20 bg-indofilter hover:bg-indofilter-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
-                >
-                    <svg
-                        class="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M12 4v16m8-8H4"
-                        ></path>
-                    </svg>
-                    <span>Buat Dokumen Baru</span>
-                    <svg
-                        class="w-4 h-4 transition-transform duration-200"
-                        :class="showDropdown ? 'rotate-180' : ''"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M19 9l-7 7-7-7"
-                        ></path>
-                    </svg>
-                </button>
-
-                <div
-                    v-if="showDropdown"
-                    class="absolute left-0 mt-2 w-64 rounded-lg shadow-lg bg-white border border-gray-100 z-20 overflow-hidden py-1"
-                >
-                    <button
-                        v-for="t in documentTypesList"
-                        :key="t.type"
-                        @click="selectCreateType(t.type)"
-                        class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors flex items-center justify-between border-b last:border-0 border-gray-50"
-                    >
-                        <span>{{ t.label }}</span>
-                        <svg
-                            class="w-3.5 h-3.5 text-gray-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+            <!-- Recent Documents -->
+            <section
+                class="rounded-lg border border-slate-200 bg-white shadow-sm"
+            >
+                <div class="border-b border-slate-100 px-5 py-3">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-semibold text-slate-950">
+                            Dokumen Terbaru
+                        </h2>
+                        <router-link
+                            to="/documents"
+                            class="text-xs font-semibold text-indofilter hover:underline"
+                            >Lihat Semua</router-link
                         >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M9 5l7 7-7 7"
-                            ></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Document List Section with filters & pagination -->
-            <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-                <div
-                    class="px-5 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50/50"
-                >
-                    <h2 class="text-base font-semibold text-gray-800">
-                        Daftar Semua Dokumen
-                    </h2>
-
-                    <!-- Filters -->
-                    <div class="flex flex-wrap items-center gap-2">
-                        <input
-                            v-model="search"
-                            type="text"
-                            placeholder="Cari nomor/partner..."
-                            class="px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-48 bg-white"
-                        />
-                        <select
-                            v-model="activeType"
-                            class="px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                        >
-                            <option
-                                v-for="t in filterTypes"
-                                :key="t.value"
-                                :value="t.value"
-                            >
-                                {{ t.label }}
-                            </option>
-                        </select>
-                        <select
-                            v-model="activeStatus"
-                            class="px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                        >
-                            <option
-                                v-for="s in statuses"
-                                :key="s.value"
-                                :value="s.value"
-                            >
-                                {{ s.label }}
-                            </option>
-                        </select>
                     </div>
                 </div>
-
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
+                    <table class="min-w-full divide-y divide-slate-100">
+                        <thead class="bg-slate-50">
                             <tr>
                                 <th
-                                    class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                    class="px-5 py-2.5 text-left text-[11px] font-semibold uppercase text-slate-400"
                                 >
-                                    No. Dokumen
+                                    Nomor
                                 </th>
                                 <th
-                                    class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                    class="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-slate-400"
                                 >
                                     Tipe
                                 </th>
                                 <th
-                                    class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
-                                >
-                                    Referensi
-                                </th>
-                                <th
-                                    class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                    class="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-slate-400"
                                 >
                                     Partner
                                 </th>
                                 <th
-                                    class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                    class="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-slate-400"
                                 >
                                     Tanggal
                                 </th>
                                 <th
-                                    class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                    class="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-slate-400"
                                 >
                                     Status
                                 </th>
                                 <th
-                                    class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                    class="px-4 py-2.5 text-right text-[11px] font-semibold uppercase text-slate-400"
                                 >
                                     Total
                                 </th>
                                 <th
-                                    class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                    class="px-5 py-2.5 text-right text-[11px] font-semibold uppercase text-slate-400"
                                 >
                                     Aksi
                                 </th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-200 bg-white">
-                            <tr v-if="paginatedDocs.length === 0">
+                        <tbody class="divide-y divide-slate-50">
+                            <tr v-if="!stats.recent_documents?.length">
                                 <td
-                                    colspan="8"
-                                    class="px-4 py-8 text-center text-gray-400"
+                                    colspan="7"
+                                    class="px-5 py-8 text-center text-xs text-slate-400"
                                 >
-                                    Belum ada dokumen / hasil filter kosong
+                                    Belum ada dokumen
                                 </td>
                             </tr>
                             <tr
-                                v-for="(doc, i) in paginatedDocs"
+                                v-for="doc in stats.recent_documents"
                                 :key="doc.id"
-                                class="hover:bg-blue-50/40 transition-colors"
-                                :class="
-                                    i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
-                                "
+                                class="transition-colors hover:bg-slate-50"
                             >
-                                <td
-                                    class="px-4 py-3 text-sm font-medium text-gray-800"
-                                >
-                                    {{ doc.number || doc.id }}
-                                </td>
-                                <td class="px-4 py-3 text-sm text-gray-600">
-                                    {{ doc.document_type?.replace(/_/g, " ") }}
-                                </td>
-                                <td class="px-4 py-3 text-sm">
+                                <td class="whitespace-nowrap px-5 py-2.5">
                                     <router-link
-                                        v-if="doc.reference"
                                         :to="{
-                                            path:
-                                                '/documents/' +
-                                                doc.reference.id,
-                                            query: {
-                                                type: doc.reference
-                                                    .document_type,
-                                            },
+                                            path: '/documents/' + doc.id,
+                                            query: { type: doc.type },
                                         }"
                                         class="text-xs font-semibold text-indofilter hover:underline"
                                     >
                                         {{
-                                            doc.reference.document_number ||
-                                            `Draft #${doc.reference.id}`
+                                            doc.document_number ||
+                                            `Draft #${doc.id}`
                                         }}
                                     </router-link>
-                                    <span v-else class="text-gray-400">-</span>
                                 </td>
-                                <td class="px-4 py-3 text-sm text-gray-700">
+                                <td
+                                    class="whitespace-nowrap px-4 py-2.5 text-xs text-slate-600"
+                                >
+                                    {{ typeLabels[doc.type] || doc.type }}
+                                </td>
+                                <td
+                                    class="max-w-[180px] truncate px-4 py-2.5 text-xs text-slate-600"
+                                >
                                     {{ doc.partner?.name || "-" }}
                                 </td>
-                                <td class="px-4 py-3 text-sm text-gray-500">
+                                <td
+                                    class="whitespace-nowrap px-4 py-2.5 text-xs text-slate-500"
+                                >
                                     {{ formatDate(doc.date) }}
                                 </td>
-                                <td class="px-4 py-3">
+                                <td class="whitespace-nowrap px-4 py-2.5">
                                     <span
-                                        class="inline-block px-2.5 py-0.5 text-xs font-medium rounded-full"
-                                        :class="
-                                            statusColors[doc.status] ||
-                                            'bg-gray-100 text-gray-600'
-                                        "
+                                        class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize"
+                                        :class="statusColors[doc.status]"
                                     >
                                         {{ doc.status }}
                                     </span>
                                 </td>
                                 <td
-                                    class="px-4 py-3 text-sm text-gray-800 text-right font-medium"
+                                    class="whitespace-nowrap px-4 py-2.5 text-right text-xs font-semibold text-slate-900"
                                 >
-                                    {{ formatMoney(doc.grand_total) }}
+                                    {{ formatMoneyFull(doc.grand_total) }}
                                 </td>
-                                <td class="px-4 py-3 text-sm text-center">
-                                    <div
-                                        class="flex items-center justify-center gap-2.5"
+                                <td
+                                    class="whitespace-nowrap px-5 py-2.5 text-right"
+                                >
+                                    <router-link
+                                        :to="{
+                                            path: '/documents/' + doc.id,
+                                            query: { type: doc.type },
+                                        }"
+                                        class="text-[11px] font-semibold text-indofilter hover:underline"
+                                        >Buka</router-link
                                     >
-                                        <button
-                                            @click="
-                                                router.push({
-                                                    path:
-                                                        '/documents/' + doc.id,
-                                                    query: {
-                                                        type: doc.document_type,
-                                                    },
-                                                })
-                                            "
-                                            class="text-gray-500 hover:text-gray-800 transition-colors"
-                                            title="Lihat"
-                                        >
-                                            <svg
-                                                class="w-4 h-4"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                                ></path>
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                                ></path>
-                                            </svg>
-                                        </button>
-                                        <button
-                                            v-if="
-                                                doc.status === 'draft' ||
-                                                doc.status === 'confirmed'
-                                            "
-                                            @click="
-                                                router.push({
-                                                    path:
-                                                        '/documents/' +
-                                                        doc.id +
-                                                        '/edit',
-                                                    query: {
-                                                        type: doc.document_type,
-                                                    },
-                                                })
-                                            "
-                                            class="text-blue-600 hover:text-blue-800 transition-colors"
-                                            title="Edit"
-                                        >
-                                            <svg
-                                                class="w-4 h-4"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                                ></path>
-                                            </svg>
-                                        </button>
-                                        <button
-                                            v-if="doc.status === 'draft'"
-                                            @click="handleConfirm(doc.id)"
-                                            class="text-green-600 hover:text-green-800 transition-colors"
-                                            title="Konfirmasi"
-                                        >
-                                            <svg
-                                                class="w-4 h-4"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M5 13l4 4L19 7"
-                                                ></path>
-                                            </svg>
-                                        </button>
-                                        <button
-                                            v-if="doc.status === 'draft'"
-                                            @click="handleCancel(doc.id)"
-                                            class="text-orange-500 hover:text-orange-700 transition-colors"
-                                            title="Batalkan"
-                                        >
-                                            <svg
-                                                class="w-4 h-4"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M6 18L18 6M6 6l12 12"
-                                                ></path>
-                                            </svg>
-                                        </button>
-                                        <button
-                                            @click="handleExport(doc.id)"
-                                            class="text-purple-500 hover:text-purple-700 transition-colors"
-                                            title="Export DOCX"
-                                        >
-                                            <svg
-                                                class="w-4 h-4"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                                ></path>
-                                            </svg>
-                                        </button>
-                                        <button
-                                            @click="handleDelete(doc.id)"
-                                            class="text-red-500 hover:text-red-700 transition-colors"
-                                            title="Hapus"
-                                        >
-                                            <svg
-                                                class="w-4 h-4"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                            >
-                                                <path
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    stroke-width="2"
-                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                                ></path>
-                                            </svg>
-                                        </button>
-                                    </div>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-
-                <!-- Pagination controls -->
-                <div
-                    class="px-5 py-3 border-t border-gray-200 flex items-center justify-between bg-gray-50/50"
-                >
-                    <div class="text-xs text-gray-500">
-                        Menampilkan
-                        <span class="font-medium">{{
-                            paginatedDocs.length > 0
-                                ? (currentPage - 1) * perPage + 1
-                                : 0
-                        }}</span>
-                        sampai
-                        <span class="font-medium">{{
-                            Math.min(currentPage * perPage, filteredDocs.length)
-                        }}</span>
-                        dari
-                        <span class="font-medium">{{
-                            filteredDocs.length
-                        }}</span>
-                        dokumen
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <button
-                            @click="currentPage--"
-                            :disabled="currentPage === 1"
-                            class="px-2.5 py-1 text-xs border border-gray-300 rounded-md bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            Sebelumnya
-                        </button>
-
-                        <div class="flex gap-1 text-xs">
-                            <button
-                                v-for="page in totalPages"
-                                :key="page"
-                                @click="currentPage = page"
-                                class="w-7 h-7 flex items-center justify-center rounded-md border"
-                                :class="
-                                    currentPage === page
-                                        ? 'bg-indofilter text-white border-indofilter font-medium'
-                                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                                "
-                            >
-                                {{ page }}
-                            </button>
-                        </div>
-
-                        <button
-                            @click="currentPage++"
-                            :disabled="currentPage === totalPages"
-                            class="px-2.5 py-1 text-xs border border-gray-300 rounded-md bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            Berikutnya
-                        </button>
-                    </div>
-                </div>
-            </div>
+            </section>
         </template>
     </div>
 </template>

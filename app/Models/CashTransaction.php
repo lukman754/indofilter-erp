@@ -14,6 +14,7 @@ class CashTransaction extends Model
         'cash_account_id',
         'type',
         'amount',
+        'formula',
         'description',
         'pic',
         'is_marked',

@@ -18,7 +18,8 @@ class DocumentController extends Controller
 {
     public function __construct(
         protected DocumentNumberService $documentNumberService
-    ) {}
+    ) {
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -42,12 +43,16 @@ class DocumentController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        if (!in_array($request->input('type'), ['invoice', 'proforma_invoice'], true)) {
+            $request->merge(['due_date' => null]);
+        }
+
         // Treat empty strings as null for nullable fields
         $request->merge([
-            'number'         => $request->input('number') ?: null,
-            'due_date'       => $request->input('due_date') ?: null,
-            'reference_id'   => $request->input('reference_id') ?: null,
-            'bank_account_id'=> $request->input('bank_account_id') ?: null,
+            'number' => $request->input('number') ?: null,
+            'due_date' => $request->input('due_date') ?: null,
+            'reference_id' => $request->input('reference_id') ?: null,
+            'bank_account_id' => $request->input('bank_account_id') ?: null,
             'customer_po_number' => $request->input('customer_po_number') ?: null,
             'customer_po_date' => $request->input('customer_po_date') ?: null,
         ]);
@@ -57,7 +62,15 @@ class DocumentController extends Controller
             'partner_id' => 'required|exists:partners,id',
             'reference_id' => 'nullable|exists:documents,id',
             'type' => 'required|in:quotation,proforma_invoice,invoice,delivery_slip,delivery_address,purchase_order',
-            'number' => 'nullable|string',
+            'number' => [
+                'nullable',
+                'string',
+                \Illuminate\Validation\Rule::unique('documents', 'document_number')
+                    ->where(function ($query) use ($request) {
+                        return $query->where('type', $request->input('type'));
+                    })
+                    ->whereNull('deleted_at')
+            ],
             'date' => 'required|date',
             'due_date' => 'nullable|date|after_or_equal:date',
             'status' => 'sometimes|in:draft,confirmed,canceled',
@@ -104,6 +117,10 @@ class DocumentController extends Controller
             'items.*.variations.*.total' => 'required_with:items.*.variations|numeric|min:0',
         ]);
 
+        if (!in_array($validated['type'], ['invoice', 'proforma_invoice'], true)) {
+            $validated['due_date'] = null;
+        }
+
         $overwrite = $request->boolean('overwrite');
         return DB::transaction(function () use ($validated, $overwrite, $request) {
             $items = $validated['items'] ?? [];
@@ -149,24 +166,39 @@ class DocumentController extends Controller
 
     public function update(Request $request, Document $document): JsonResponse
     {
+        $effectiveType = $request->input('type', $document->type);
+        if (!in_array($effectiveType, ['invoice', 'proforma_invoice'], true)) {
+            $request->merge(['due_date' => null]);
+        }
+
         // Treat empty strings as null for nullable fields
         $request->merge([
-            'number'         => $request->input('number') ?: null,
-            'due_date'       => $request->input('due_date') ?: null,
-            'reference_id'   => $request->input('reference_id') ?: null,
-            'bank_account_id'=> $request->input('bank_account_id') ?: null,
+            'number' => $request->input('number') ?: null,
+            'due_date' => $request->input('due_date') ?: null,
+            'reference_id' => $request->input('reference_id') ?: null,
+            'bank_account_id' => $request->input('bank_account_id') ?: null,
             'customer_po_number' => $request->input('customer_po_number') ?: null,
             'customer_po_date' => $request->input('customer_po_date') ?: null,
         ]);
 
+        $effectiveDate = $request->input('date', $document->getRawOriginal('date'));
         $validated = $request->validate([
             'company_id' => 'sometimes|exists:companies,id',
             'partner_id' => 'sometimes|exists:partners,id',
             'reference_id' => 'nullable|exists:documents,id',
             'type' => 'sometimes|in:quotation,proforma_invoice,invoice,delivery_slip,delivery_address,purchase_order',
-            'number' => 'nullable|string',
+            'number' => [
+                'nullable',
+                'string',
+                \Illuminate\Validation\Rule::unique('documents', 'document_number')
+                    ->where(function ($query) use ($request, $document) {
+                        return $query->where('type', $request->input('type', $document->type));
+                    })
+                    ->whereNull('deleted_at')
+                    ->ignore($document->id)
+            ],
             'date' => 'sometimes|date',
-            'due_date' => 'nullable|date|after_or_equal:date',
+            'due_date' => 'nullable|date|after_or_equal:' . $effectiveDate,
             'status' => 'sometimes|in:draft,confirmed,canceled',
             'terms' => 'nullable|string',
             'notes' => 'nullable|string',
@@ -211,6 +243,11 @@ class DocumentController extends Controller
             'items.*.variations.*.total' => 'required_with:items.*.variations|numeric|min:0',
         ]);
 
+        $effectiveType = $validated['type'] ?? $document->type;
+        if (!in_array($effectiveType, ['invoice', 'proforma_invoice'], true)) {
+            $validated['due_date'] = null;
+        }
+
         $overwrite = $request->boolean('overwrite');
         return DB::transaction(function () use ($validated, $document, $overwrite, $request) {
             $items = $validated['items'] ?? null;
@@ -244,6 +281,10 @@ class DocumentController extends Controller
 
     public function destroy(Document $document): JsonResponse
     {
+        // Nullify document_number before soft-deleting so the unique constraint
+        // (type, document_number) is freed for future documents.
+        $document->document_number = null;
+        $document->save();
         $document->delete();
 
         return response()->json(['message' => 'Document deleted successfully.']);
@@ -277,7 +318,7 @@ class DocumentController extends Controller
         try {
             $document = Document::with(['company', 'partner', 'items'])->findOrFail($id);
             $overwrite = $request->boolean('overwrite');
-            
+
             $storagePath = $this->getStoragePathForDocument($document);
             if (empty($storagePath)) {
                 return response()->json([
@@ -289,7 +330,7 @@ class DocumentController extends Controller
                 mkdir($storagePath, 0755, true);
             }
 
-            $fileName = str_replace(['/', '\\'], '-', $document->document_number) . '.docx';
+            $fileName = $this->getDocumentFileName($document, 'docx');
             $fullPath = rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $fileName;
 
             if (file_exists($fullPath) && !$overwrite) {
@@ -307,7 +348,7 @@ class DocumentController extends Controller
 
             $msg = "Dokumen berhasil diekspor & disimpan ke:\n" . $fullPath;
             if ($pdfGenerated) {
-                $pdfFileName = str_replace(['/', '\\'], '-', $document->document_number) . '.pdf';
+                $pdfFileName = $this->getDocumentFileName($document, 'pdf');
                 $msg .= "\n\nSerta versi PDF berhasil disimpan ke:\n" . rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $pdfFileName;
             }
 
@@ -327,21 +368,30 @@ class DocumentController extends Controller
             'number' => 'required|string',
             'company_id' => 'nullable|integer',
             'type' => 'nullable|string',
+            'recipient_pic' => 'nullable|string',
+            'recipient_name' => 'nullable|string',
+            'partner_id' => 'nullable|integer',
         ]);
 
         $number = $request->query('number');
         $companyId = $request->query('company_id');
         $type = $request->query('type');
 
-        $document = Document::with('company')->where('document_number', $number)->first();
+        $document = Document::with(['company', 'partner'])->where('document_number', $number)->first();
         if (!$document) {
             $document = new Document([
                 'document_number' => $number,
                 'type' => $type,
                 'company_id' => $companyId,
+                'recipient_pic' => $request->query('recipient_pic'),
+                'recipient_name' => $request->query('recipient_name'),
+                'partner_id' => $request->query('partner_id'),
             ]);
             if ($companyId) {
                 $document->setRelation('company', \App\Models\Company::find($companyId));
+            }
+            if ($request->query('partner_id')) {
+                $document->setRelation('partner', \App\Models\Partner::find($request->query('partner_id')));
             }
         }
 
@@ -355,7 +405,7 @@ class DocumentController extends Controller
             ]);
         }
 
-        $fileName = str_replace(['/', '\\'], '-', $number) . '.docx';
+        $fileName = $this->getDocumentFileName($document, 'docx');
         $fullPath = rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $fileName;
 
         return response()->json([
@@ -378,7 +428,7 @@ class DocumentController extends Controller
             mkdir($storagePath, 0755, true);
         }
 
-        $fileName = str_replace(['/', '\\'], '-', $document->document_number) . '.docx';
+        $fileName = $this->getDocumentFileName($document, 'docx');
         $fullPath = rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $fileName;
 
         if (file_exists($fullPath) && !$overwrite) {
@@ -406,13 +456,13 @@ class DocumentController extends Controller
         }
 
         $cmd = '"' . $sofficePath . '" --headless --convert-to pdf --outdir ' . escapeshellarg($outputDir) . ' ' . escapeshellarg($docxPath);
-        
+
         exec($cmd, $output, $return);
-        
+
         if ($return === 0) {
             return true;
         }
-        
+
         \Illuminate\Support\Facades\Log::error("LibreOffice PDF conversion failed with exit code: {$return}. Output: " . implode("\n", $output));
         return false;
     }
@@ -453,10 +503,10 @@ class DocumentController extends Controller
                 $company = \App\Models\Company::find($companyId);
                 $companyName = $company ? $company->name : null;
             }
-            
+
             $companyDir = $companyName ? str_replace('.', '', $companyName) : 'Default';
             $typeDir = strtoupper(str_replace('_', ' ', $type));
-            
+
             return rtrim($basePath, '/\\') . DIRECTORY_SEPARATOR . $companyDir . DIRECTORY_SEPARATOR . $typeDir;
         }
 
@@ -493,11 +543,11 @@ class DocumentController extends Controller
             $templatePath = base_path("templates/{$document->type}.docx");
         }
 
-        if (! file_exists($templatePath)) {
+        if (!file_exists($templatePath)) {
             throw new \Exception("Template file not found for type: {$document->type}");
         }
 
-        $templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor($templatePath);
+        $templateProcessor = new SafeTemplateProcessor($templatePath);
 
         $company = $document->company;
         $partner = $document->partner;
@@ -525,19 +575,42 @@ class DocumentController extends Controller
         $templateProcessor->setValue('invoice_number', $document->reference?->document_number ?? '');
         $templateProcessor->setValue('doc_date', $this->formatIndonesianDate($document->date));
         $templateProcessor->setValue('doc_due_date', $this->formatIndonesianDate($document->due_date));
-        $templateProcessor->setValue('partner_name', $document->recipient_name ?: $partner->name ?? '');
-        $templateProcessor->setValue('partner_address', $document->recipient_address ?: $partner->address ?? '');
-        $templateProcessor->setValue('partner_contact', $partner->contact_person ?? '');
-        $templateProcessor->setValue('partner_phone', $document->recipient_phone ?: $partner->phone ?? '');
-        $templateProcessor->setValue('partner_pic', $document->recipient_pic ?: $partner->contact_person ?? '');
-        $templateProcessor->setValue('partner_npwp', $partner->npwp ?? '');
+        // Prioritaskan data yang diinput manual di dokumen (recipient_*),
+        // fallback ke data partner jika kosong
+        $partnerName    = ($document->recipient_name ?? '') ?: ($partner?->name ?? '');
+        $partnerAddress = ($document->recipient_address ?? '') ?: ($partner?->address ?? '');
+        $partnerContact = $partner?->contact_person ?? '';
+
+        $partnerPic   = ($document->recipient_pic ?? '')   ?: ($partner?->contact_person ?? '');
+        $partnerPhone = ($document->recipient_phone ?? '') ?: ($partner?->phone ?? '');
+
+        if ($document->type === 'delivery_address') {
+            $partnerPhoneValue = $partnerPhone;
+        } else {
+            if (!empty($partnerPic) && !empty($partnerPhone)) {
+                $partnerPhoneValue = $partnerPic . ' / ' . $partnerPhone;
+            } elseif (!empty($partnerPic)) {
+                $partnerPhoneValue = $partnerPic;
+            } elseif (!empty($partnerPhone)) {
+                $partnerPhoneValue = $partnerPhone;
+            } else {
+                $partnerPhoneValue = '';
+            }
+        }
+
+        $templateProcessor->setValue('partner_name', $partnerName);
+        $templateProcessor->setValue('partner_address', $partnerAddress);
+        $templateProcessor->setValue('partner_contact', $partnerContact);
+        $templateProcessor->setValue('partner_phone', $partnerPhoneValue);
+        $templateProcessor->setValue('partner_pic', $partnerPic);
+        $templateProcessor->setValue('partner_npwp', $partner?->npwp ?? '');
 
         $templateProcessor->setValue('subtotal', $this->formatRupiah($document->subtotal));
         $templateProcessor->setValue('terbilang', $document->terbilang ?? '');
         $templateProcessor->setValue('dp_percent', $this->formatQty($document->dp_percent ?? 0));
         $templateProcessor->setValue('dp_amount', $this->formatRupiah($document->dp_amount ?? 0));
         $templateProcessor->setValue('remaining_amount', $this->formatRupiah(($document->subtotal + $document->tax) - ($document->dp_amount ?? 0)));
-        
+
         $paymentType = $document->payment_type ?? 'full';
         $templateProcessor->setValue('payment_type', $paymentType);
 
@@ -545,7 +618,7 @@ class DocumentController extends Controller
 
         // 1. Discount Row
         if (in_array('discount', $variables)) {
-            $hasDiscount = (float)$document->discount > 0;
+            $hasDiscount = (float) $document->discount > 0;
             $templateProcessor->cloneRow('discount', $hasDiscount ? 1 : 0);
             if ($hasDiscount) {
                 $templateProcessor->setValue('discount#1', $this->formatRupiah($document->discount));
@@ -554,10 +627,11 @@ class DocumentController extends Controller
 
         // 2. Tax Row (PPN)
         if (in_array('tax', $variables)) {
-            $hasTax = (bool)$document->is_ppn;
-            $templateProcessor->cloneRow('tax', $hasTax ? 1 : 0);
-            if ($hasTax) {
+            $templateProcessor->cloneRow('tax', 1);
+            if ($document->is_ppn) {
                 $templateProcessor->setValue('tax#1', $this->formatRupiah($document->tax));
+            } else {
+                $templateProcessor->setValue('tax#1', '');
             }
         }
 
@@ -590,8 +664,8 @@ class DocumentController extends Controller
                 $templateProcessor->cloneRow('rem_value', 1);
             }
 
-            $dpPct = (float)$document->dp_percent;
-            $dpAmt = (float)$document->dp_amount;
+            $dpPct = (float) $document->dp_percent;
+            $dpAmt = (float) $document->dp_amount;
             $remAmt = $totalTagihanVal - $dpAmt;
 
             if ($paymentType === 'dp') {
@@ -601,7 +675,7 @@ class DocumentController extends Controller
                 }
 
                 if (in_array('rem_value', $variables)) {
-                    $templateProcessor->setValue('rem_label#1', strtoupper('Pelunasan ' . (100 - (int)$dpPct) . '%'));
+                    $templateProcessor->setValue('rem_label#1', strtoupper('Pelunasan ' . (100 - (int) $dpPct) . '%'));
                     $templateProcessor->setValue('rem_value#1', $this->formatRupiah($remAmt));
                 }
 
@@ -617,7 +691,7 @@ class DocumentController extends Controller
                 }
 
                 if (in_array('rem_value', $variables)) {
-                    $templateProcessor->setValue('rem_label#1', strtoupper('Pelunasan ' . (100 - (int)$dpPct) . '%'));
+                    $templateProcessor->setValue('rem_label#1', strtoupper('Pelunasan ' . (100 - (int) $dpPct) . '%'));
                     $templateProcessor->setValue('rem_value#1', $this->formatRupiah($remAmt));
                 }
 
@@ -671,104 +745,107 @@ class DocumentController extends Controller
 
         $items = $document->items;
 
-        $templateProcessor->cloneRow('product_name', $items->count());
+        $variablesBeforeItems = $templateProcessor->getVariables();
+        if (in_array('product_name', $variablesBeforeItems)) {
+            $templateProcessor->cloneRow('product_name', $items->count());
 
-        foreach ($items as $index => $item) {
-            $row = $index + 1;
-            $templateProcessor->setValue("no#{$row}", $row);
-            $templateProcessor->setValue("product_name#{$row}", $item->product_name ?? '');
-            $templateProcessor->setValue("uom#{$row}", $item->uom ?? '');
-
-            $isPO = $document->type === 'purchase_order';
-            $hasDescriptionPlaceholder = in_array("description#{$row}", $templateProcessor->getVariables());
-
-            $variations = $item->variations;
-            if (!empty($variations) && is_array($variations)) {
-                if ($hasDescriptionPlaceholder && !$isPO) {
-                    // Template has description column: Keep product_name clean, put variations in description
-                    $desc = trim($item->description ?? '');
-                    $descLines = empty($desc) ? [] : explode("\n", str_replace("\r", "", $desc));
-                    $paddingCount = count($descLines);
-
-                    $descWithVariations = $descLines;
-                    foreach ($variations as $idx => $v) {
-                        $num = $idx + 1;
-                        $descWithVariations[] = "{$num}. {$v['name']}";
-                    }
-                    $this->setMultilineValue($templateProcessor, "description#{$row}", implode("\n", $descWithVariations));
-                    $templateProcessor->setValue("product_name#{$row}", $item->product_name ?? '');
-                } else {
-                    // PO (or template where description is in same cell): Merge into product_name and clear description
-                    $parentLines = [];
-                    $parentLines[] = trim($item->product_name ?? '');
-                    
-                    // Estimate product name wrapping: 30 chars per line for PO column
-                    $wrappedLinesCount = (int) ceil(strlen($item->product_name ?? '') / 30);
-                    $paddingCount = max(1, $wrappedLinesCount);
-
-                    if (!empty(trim($item->description ?? ''))) {
-                        $descLines = explode("\n", str_replace("\r", "", trim($item->description)));
-                        $parentLines = array_merge($parentLines, $descLines);
-                        $paddingCount += count($descLines);
-                    }
-
-                    foreach ($variations as $idx => $v) {
-                        $num = $idx + 1;
-                        $parentLines[] = "{$num}. {$v['name']}";
-                    }
-
-                    $this->setMultilineValue($templateProcessor, "product_name#{$row}", implode("\n", $parentLines));
-                    if ($hasDescriptionPlaceholder) {
-                        $templateProcessor->setValue("description#{$row}", '');
-                    }
-                }
-
-                // Build lines for Unit Price
-                $priceLines = array_fill(0, $paddingCount, '');
-                foreach ($variations as $v) {
-                    $priceLines[] = $this->formatRupiah($v['unit_price']);
-                }
-                $this->setMultilineValue($templateProcessor, "unit_price#{$row}", implode("\n", $priceLines));
-
-                // Build lines for Qty
-                $qtyLines = array_fill(0, $paddingCount, '');
-                foreach ($variations as $v) {
-                    $qtyLines[] = $this->formatQty($v['qty']);
-                }
-                $this->setMultilineValue($templateProcessor, "qty#{$row}", implode("\n", $qtyLines));
-
-                // Build lines for Total
-                $totalLines = array_fill(0, $paddingCount, '');
-                foreach ($variations as $v) {
-                    $totalLines[] = $this->formatRupiah($v['total']);
-                }
-                $this->setMultilineValue($templateProcessor, "total#{$row}", implode("\n", $totalLines));
-
-                // Build lines for UOM (Unit) - Print UOM for each variation!
-                $uomLines = array_fill(0, $paddingCount, '');
-                foreach ($variations as $v) {
-                    $uomLines[] = $item->uom ?? 'PCS';
-                }
-                $this->setMultilineValue($templateProcessor, "uom#{$row}", implode("\n", $uomLines));
-            } else {
-                // Standard single item
-                if ($hasDescriptionPlaceholder && !$isPO) {
-                    $this->setMultilineValue($templateProcessor, "description#{$row}", $item->description ?? '');
-                    $templateProcessor->setValue("product_name#{$row}", $item->product_name ?? '');
-                } else {
-                    $combinedName = $item->product_name ?? '';
-                    if (!empty(trim($item->description ?? ''))) {
-                        $combinedName .= "\n" . trim($item->description);
-                    }
-                    $this->setMultilineValue($templateProcessor, "product_name#{$row}", $combinedName);
-                    if ($hasDescriptionPlaceholder) {
-                        $templateProcessor->setValue("description#{$row}", '');
-                    }
-                }
-                $templateProcessor->setValue("qty#{$row}", $this->formatQty($item->qty));
+            foreach ($items as $index => $item) {
+                $row = $index + 1;
+                $templateProcessor->setValue("no#{$row}", $row);
+                $templateProcessor->setValue("product_name#{$row}", $item->product_name ?? '');
                 $templateProcessor->setValue("uom#{$row}", $item->uom ?? '');
-                $templateProcessor->setValue("unit_price#{$row}", $this->formatRupiah($item->unit_price));
-                $templateProcessor->setValue("total#{$row}", $this->formatRupiah($item->total));
+
+                $isPO = $document->type === 'purchase_order';
+                $hasDescriptionPlaceholder = in_array("description#{$row}", $templateProcessor->getVariables());
+
+                $variations = $item->variations;
+                if (!empty($variations) && is_array($variations)) {
+                    if ($hasDescriptionPlaceholder && !$isPO) {
+                        // Template has description column: Keep product_name clean, put variations in description
+                        $desc = trim($item->description ?? '');
+                        $descLines = empty($desc) ? [] : explode("\n", str_replace("\r", "", $desc));
+                        $paddingCount = count($descLines);
+
+                        $descWithVariations = $descLines;
+                        foreach ($variations as $idx => $v) {
+                            $num = $idx + 1;
+                            $descWithVariations[] = "{$num}. {$v['name']}";
+                        }
+                        $this->setMultilineValue($templateProcessor, "description#{$row}", implode("\n", $descWithVariations));
+                        $templateProcessor->setValue("product_name#{$row}", $item->product_name ?? '');
+                    } else {
+                        // PO (or template where description is in same cell): Merge into product_name and clear description
+                        $parentLines = [];
+                        $parentLines[] = trim($item->product_name ?? '');
+
+                        // Estimate product name wrapping: 30 chars per line for PO column
+                        $wrappedLinesCount = (int) ceil(strlen($item->product_name ?? '') / 30);
+                        $paddingCount = max(1, $wrappedLinesCount);
+
+                        if (!empty(trim($item->description ?? ''))) {
+                            $descLines = explode("\n", str_replace("\r", "", trim($item->description)));
+                            $parentLines = array_merge($parentLines, $descLines);
+                            $paddingCount += count($descLines);
+                        }
+
+                        foreach ($variations as $idx => $v) {
+                            $num = $idx + 1;
+                            $parentLines[] = "{$num}. {$v['name']}";
+                        }
+
+                        $this->setMultilineValue($templateProcessor, "product_name#{$row}", implode("\n", $parentLines));
+                        if ($hasDescriptionPlaceholder) {
+                            $templateProcessor->setValue("description#{$row}", '');
+                        }
+                    }
+
+                    // Build lines for Unit Price
+                    $priceLines = array_fill(0, $paddingCount, '');
+                    foreach ($variations as $v) {
+                        $priceLines[] = $this->formatRupiah($v['unit_price']);
+                    }
+                    $this->setMultilineValue($templateProcessor, "unit_price#{$row}", implode("\n", $priceLines));
+
+                    // Build lines for Qty
+                    $qtyLines = array_fill(0, $paddingCount, '');
+                    foreach ($variations as $v) {
+                        $qtyLines[] = $this->formatQty($v['qty']);
+                    }
+                    $this->setMultilineValue($templateProcessor, "qty#{$row}", implode("\n", $qtyLines));
+
+                    // Build lines for Total
+                    $totalLines = array_fill(0, $paddingCount, '');
+                    foreach ($variations as $v) {
+                        $totalLines[] = $this->formatRupiah($v['total']);
+                    }
+                    $this->setMultilineValue($templateProcessor, "total#{$row}", implode("\n", $totalLines));
+
+                    // Build lines for UOM (Unit) - Print UOM for each variation!
+                    $uomLines = array_fill(0, $paddingCount, '');
+                    foreach ($variations as $v) {
+                        $uomLines[] = $item->uom ?? 'PCS';
+                    }
+                    $this->setMultilineValue($templateProcessor, "uom#{$row}", implode("\n", $uomLines));
+                } else {
+                    // Standard single item
+                    if ($hasDescriptionPlaceholder && !$isPO) {
+                        $this->setMultilineValue($templateProcessor, "description#{$row}", $item->description ?? '');
+                        $templateProcessor->setValue("product_name#{$row}", $item->product_name ?? '');
+                    } else {
+                        $combinedName = $item->product_name ?? '';
+                        if (!empty(trim($item->description ?? ''))) {
+                            $combinedName .= "\n" . trim($item->description);
+                        }
+                        $this->setMultilineValue($templateProcessor, "product_name#{$row}", $combinedName);
+                        if ($hasDescriptionPlaceholder) {
+                            $templateProcessor->setValue("description#{$row}", '');
+                        }
+                    }
+                    $templateProcessor->setValue("qty#{$row}", $this->formatQty($item->qty));
+                    $templateProcessor->setValue("uom#{$row}", $item->uom ?? '');
+                    $templateProcessor->setValue("unit_price#{$row}", $this->formatRupiah($item->unit_price));
+                    $templateProcessor->setValue("total#{$row}", $this->formatRupiah($item->total));
+                }
             }
         }
 
@@ -814,15 +891,32 @@ class DocumentController extends Controller
         return $templateProcessor;
     }
 
+    private function getDocumentFileName(Document $document, string $extension = 'docx'): string
+    {
+        if ($document->type === 'delivery_address') {
+            $partner = $document->partner;
+            $pic = $document->recipient_pic ?: ($partner->contact_person ?? '');
+            $name = $document->recipient_name ?: ($partner->name ?? '');
+            $baseName = trim($pic . ' - ' . $name);
+            if (empty($baseName) || $baseName === '-') {
+                $baseName = $document->document_number;
+            }
+            return str_replace(['/', '\\'], '-', $baseName) . '.' . $extension;
+        }
+
+        return str_replace(['/', '\\'], '-', $document->document_number) . '.' . $extension;
+    }
+
     private function formatBankAccount($bank): string
     {
-        if (!$bank) return '';
+        if (!$bank)
+            return '';
         return "{$bank->bank_name} - {$bank->account_name} ({$bank->account_number})";
     }
 
     private function formatRupiah($value): string
     {
-        $floatVal = (float)$value;
+        $floatVal = (float) $value;
         $formatted = number_format($floatVal, 2, ',', '.');
         if (str_ends_with($formatted, ',00')) {
             $formatted = substr($formatted, 0, -3);
@@ -832,7 +926,7 @@ class DocumentController extends Controller
 
     private function formatQty($value): string
     {
-        $floatVal = (float)$value;
+        $floatVal = (float) $value;
         $formatted = number_format($floatVal, 2, ',', '.');
         if (str_ends_with($formatted, ',00')) {
             $formatted = substr($formatted, 0, -3);
@@ -859,9 +953,9 @@ class DocumentController extends Controller
         if (empty($date)) {
             return '';
         }
-        
+
         $carbonDate = $date instanceof \Carbon\Carbon ? $date : \Carbon\Carbon::parse($date);
-        
+
         return $carbonDate->locale('id')->isoFormat('D MMMM YYYY');
     }
 
@@ -945,92 +1039,92 @@ class DocumentController extends Controller
             $response = Http::withHeaders([
                 'Content-Type' => 'application/json',
             ])->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}", [
-                'contents' => [
-                    [
-                        'parts' => [
+                        'contents' => [
                             [
-                                'inlineData' => [
-                                    'mimeType' => 'application/pdf',
-                                    'data' => $pdfBase64,
-                                ]
-                            ],
-                            [
-                                'text' => 'Analyze the uploaded document. Extract the details like partner name (vendor or customer), document date, document number, payment terms, notes, and the line items with their product name, description, quantity, unit of measure, and unit price.'
-                            ]
-                        ]
-                    ]
-                ],
-                'generationConfig' => [
-                    'responseMimeType' => 'application/json',
-                    'responseSchema' => [
-                        'type' => 'OBJECT',
-                        'properties' => [
-                            'partner_name' => [
-                                'type' => 'STRING',
-                                'description' => 'Nama perusahaan rekanan (customer / vendor / client) yang tertulis di PDF. Dahulukan nama perusahaan daripada perorangan jika ada.'
-                            ],
-                            'document_number' => [
-                                'type' => 'STRING',
-                                'description' => 'Nomor surat penawaran, invoice, atau PO yang tercantum di PDF.'
-                            ],
-                            'date' => [
-                                'type' => 'STRING',
-                                'description' => 'Tanggal dokumen dikeluarkan, format: YYYY-MM-DD. Gunakan format YYYY-MM-DD saja.'
-                            ],
-                            'due_date' => [
-                                'type' => 'STRING',
-                                'description' => 'Tanggal jatuh tempo jika ada, format: YYYY-MM-DD.'
-                            ],
-                            'notes' => [
-                                'type' => 'STRING',
-                                'description' => 'Catatan tambahan seperti keterangan teknis atau catatan lain yang ada di PDF.'
-                            ],
-                            'terms' => [
-                                'type' => 'STRING',
-                                'description' => 'Syarat pembayaran atau terms & conditions yang tertulis di PDF.'
-                            ],
-                            'discount' => [
-                                'type' => 'NUMBER',
-                                'description' => 'Nilai diskon total jika tertulis nominalnya.'
-                            ],
-                            'is_ppn' => [
-                                'type' => 'BOOLEAN',
-                                'description' => 'Apakah harga di penawaran ini sudah termasuk PPN (VAT) atau menerapkan PPN (true jika ya, false jika tidak).'
-                            ],
-                            'items' => [
-                                'type' => 'ARRAY',
-                                'items' => [
-                                    'type' => 'OBJECT',
-                                    'properties' => [
-                                        'product_name' => [
-                                            'type' => 'STRING',
-                                            'description' => 'Nama barang / nama produk utama.'
-                                        ],
-                                        'description' => [
-                                            'type' => 'STRING',
-                                            'description' => 'Spesifikasi detail, tipe, deskripsi barang.'
-                                        ],
-                                        'qty' => [
-                                            'type' => 'NUMBER',
-                                            'description' => 'Kuantitas atau jumlah unit.'
-                                        ],
-                                        'uom' => [
-                                            'type' => 'STRING',
-                                            'description' => 'Satuan barang, contoh: PCS, SET, UNIT, BOX.'
-                                        ],
-                                        'unit_price' => [
-                                            'type' => 'NUMBER',
-                                            'description' => 'Harga per unit sebelum PPN/Diskon.'
+                                'parts' => [
+                                    [
+                                        'inlineData' => [
+                                            'mimeType' => 'application/pdf',
+                                            'data' => $pdfBase64,
                                         ]
                                     ],
-                                    'required' => ['product_name', 'qty', 'unit_price']
+                                    [
+                                        'text' => 'Analyze the uploaded document. Extract the details like partner name (vendor or customer), document date, document number, payment terms, notes, and the line items with their product name, description, quantity, unit of measure, and unit price.'
+                                    ]
                                 ]
                             ]
                         ],
-                        'required' => ['partner_name', 'items']
-                    ]
-                ]
-            ]);
+                        'generationConfig' => [
+                            'responseMimeType' => 'application/json',
+                            'responseSchema' => [
+                                'type' => 'OBJECT',
+                                'properties' => [
+                                    'partner_name' => [
+                                        'type' => 'STRING',
+                                        'description' => 'Nama perusahaan rekanan (customer / vendor / client) yang tertulis di PDF. Dahulukan nama perusahaan daripada perorangan jika ada.'
+                                    ],
+                                    'document_number' => [
+                                        'type' => 'STRING',
+                                        'description' => 'Nomor surat penawaran, invoice, atau PO yang tercantum di PDF.'
+                                    ],
+                                    'date' => [
+                                        'type' => 'STRING',
+                                        'description' => 'Tanggal dokumen dikeluarkan, format: YYYY-MM-DD. Gunakan format YYYY-MM-DD saja.'
+                                    ],
+                                    'due_date' => [
+                                        'type' => 'STRING',
+                                        'description' => 'Tanggal jatuh tempo jika ada, format: YYYY-MM-DD.'
+                                    ],
+                                    'notes' => [
+                                        'type' => 'STRING',
+                                        'description' => 'Catatan tambahan seperti keterangan teknis atau catatan lain yang ada di PDF.'
+                                    ],
+                                    'terms' => [
+                                        'type' => 'STRING',
+                                        'description' => 'Syarat pembayaran atau terms & conditions yang tertulis di PDF.'
+                                    ],
+                                    'discount' => [
+                                        'type' => 'NUMBER',
+                                        'description' => 'Nilai diskon total jika tertulis nominalnya.'
+                                    ],
+                                    'is_ppn' => [
+                                        'type' => 'BOOLEAN',
+                                        'description' => 'Apakah harga di penawaran ini sudah termasuk PPN (VAT) atau menerapkan PPN (true jika ya, false jika tidak).'
+                                    ],
+                                    'items' => [
+                                        'type' => 'ARRAY',
+                                        'items' => [
+                                            'type' => 'OBJECT',
+                                            'properties' => [
+                                                'product_name' => [
+                                                    'type' => 'STRING',
+                                                    'description' => 'Nama barang / nama produk utama.'
+                                                ],
+                                                'description' => [
+                                                    'type' => 'STRING',
+                                                    'description' => 'Spesifikasi detail, tipe, deskripsi barang.'
+                                                ],
+                                                'qty' => [
+                                                    'type' => 'NUMBER',
+                                                    'description' => 'Kuantitas atau jumlah unit.'
+                                                ],
+                                                'uom' => [
+                                                    'type' => 'STRING',
+                                                    'description' => 'Satuan barang, contoh: PCS, SET, UNIT, BOX.'
+                                                ],
+                                                'unit_price' => [
+                                                    'type' => 'NUMBER',
+                                                    'description' => 'Harga per unit sebelum PPN/Diskon.'
+                                                ]
+                                            ],
+                                            'required' => ['product_name', 'qty', 'unit_price']
+                                        ]
+                                    ]
+                                ],
+                                'required' => ['partner_name', 'items']
+                            ]
+                        ]
+                    ]);
 
             if ($response->failed()) {
                 $errorMsg = $response->json('error.message') ?? 'Terjadi kesalahan pada Gemini API.';
@@ -1063,9 +1157,9 @@ class DocumentController extends Controller
             $partnerName = $extracted['partner_name'] ?? '';
             $matchedPartner = null;
             if (!empty($partnerName)) {
-                $matchedPartner = Partner::where(function($query) use ($partnerName) {
+                $matchedPartner = Partner::where(function ($query) use ($partnerName) {
                     $query->where('name', 'like', "%{$partnerName}%")
-                          ->orWhere('alias', 'like', "%{$partnerName}%");
+                        ->orWhere('alias', 'like', "%{$partnerName}%");
                 })->first();
             }
 
@@ -1081,7 +1175,7 @@ class DocumentController extends Controller
                     'terms' => $extracted['terms'] ?? '',
                     'discount' => $extracted['discount'] ?? 0,
                     'is_ppn' => $extracted['is_ppn'] ?? true,
-                    'items' => array_map(function($item) {
+                    'items' => array_map(function ($item) {
                         return [
                             'product_name' => $item['product_name'] ?? '',
                             'description' => $item['description'] ?? '',
@@ -1144,11 +1238,11 @@ class DocumentController extends Controller
 
         $file = $request->file('customer_po_file');
         $storagePath = $this->getStoragePathForPoMasuk($document);
-        
+
         if (!file_exists($storagePath)) {
             mkdir($storagePath, 0755, true);
         }
-        
+
         // Delete old file if exists
         if (!empty($document->customer_po_file)) {
             $oldPath = rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $document->customer_po_file;
@@ -1162,7 +1256,7 @@ class DocumentController extends Controller
         $safePoNumber = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $document->customer_po_number ?: 'PO');
         $filename = $safeDocNumber . ' - ' . $safePoNumber . '.' . $extension;
         $file->move($storagePath, $filename);
-        
+
         $document->update(['customer_po_file' => $filename]);
 
         return response()->json([
@@ -1225,5 +1319,181 @@ class DocumentController extends Controller
 
         // 5. Hard fallback
         return storage_path('app/public/po_masuk');
+    }
+
+    public function getStoragePathForSupportingDocuments(Document $document): string
+    {
+        $companyId = $document->company_id;
+
+        $path = null;
+        if ($companyId) {
+            $path = \App\Models\Setting::get("local_path_supporting_docs", null, $companyId);
+        }
+        if ($path) {
+            $safeDocNumber = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $document->document_number ?: 'Draft_' . $document->id);
+            return rtrim($path, '/\\') . DIRECTORY_SEPARATOR . $safeDocNumber;
+        }
+
+        $path = \App\Models\Setting::get("local_path_supporting_docs");
+        if ($path) {
+            $safeDocNumber = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $document->document_number ?: 'Draft_' . $document->id);
+            return rtrim($path, '/\\') . DIRECTORY_SEPARATOR . $safeDocNumber;
+        }
+
+        $basePath = \App\Models\Setting::get('documents_storage_path');
+        if (empty($basePath)) {
+            $basePath = env('DOCUMENTS_STORAGE_PATH');
+        }
+
+        if ($basePath) {
+            $companyName = $document->company ? $document->company->name : null;
+            $companyDir = $companyName ? str_replace('.', '', $companyName) : 'Default';
+            $safeDocNumber = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $document->document_number ?: 'Draft_' . $document->id);
+            return rtrim($basePath, '/\\') . DIRECTORY_SEPARATOR . $companyDir . DIRECTORY_SEPARATOR . 'DOKUMEN PENDUKUNG' . DIRECTORY_SEPARATOR . $safeDocNumber;
+        }
+
+        return storage_path('app/public/supporting_docs/' . $document->id);
+    }
+
+    public function uploadSupportingDocument(Request $request, Document $document): JsonResponse
+    {
+        if ($document->type !== 'invoice') {
+            return response()->json(['message' => 'Hanya dokumen Invoice yang dapat memiliki dokumen pendukung.'], 400);
+        }
+
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,jpeg,png,jpg,gif,doc,docx,xls,xlsx,zip,rar|max:10240', // max 10MB
+            'title' => 'nullable|string|max:150',
+        ]);
+
+        $files = $document->supporting_documents ?: [];
+        if (count($files) >= 10) {
+            return response()->json(['message' => 'Batas maksimum 10 dokumen pendukung telah tercapai.'], 400);
+        }
+
+        $file = $request->file('file');
+        $storagePath = $this->getStoragePathForSupportingDocuments($document);
+
+        if (!file_exists($storagePath)) {
+            mkdir($storagePath, 0755, true);
+        }
+
+        $extension = $file->getClientOriginalExtension();
+        $safeDocNumber = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $document->document_number ?: 'Draft_' . $document->id);
+
+        if ($request->filled('title')) {
+            $prefix = trim($request->title);
+            $title = $prefix;
+        } else {
+            $prefix = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+            $title = $prefix;
+        }
+
+        $safePrefix = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $prefix);
+        $filename = "{$safePrefix} - {$safeDocNumber}.{$extension}";
+
+        $counter = 1;
+        while (file_exists($storagePath . DIRECTORY_SEPARATOR . $filename)) {
+            $filename = "{$safePrefix} - {$safeDocNumber} ({$counter}).{$extension}";
+            $counter++;
+        }
+
+        $file->move($storagePath, $filename);
+
+        $files[] = [
+            'filename' => $filename,
+            'original_name' => $file->getClientOriginalName(),
+            'title' => $title,
+            'uploaded_at' => now()->toDateTimeString(),
+        ];
+
+        $document->update(['supporting_documents' => $files]);
+
+        return response()->json([
+            'message' => 'Dokumen pendukung berhasil diunggah.',
+            'supporting_documents' => $files
+        ]);
+    }
+
+    public function deleteSupportingDocument(Request $request, Document $document): JsonResponse
+    {
+        $request->validate([
+            'filename' => 'required|string',
+        ]);
+
+        $files = $document->supporting_documents ?: [];
+        $newFiles = [];
+        $deleted = false;
+
+        foreach ($files as $f) {
+            if ($f['filename'] === $request->filename) {
+                $storagePath = $this->getStoragePathForSupportingDocuments($document);
+                $filePath = rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $f['filename'];
+                if (file_exists($filePath)) {
+                    @unlink($filePath);
+                }
+                $deleted = true;
+            } else {
+                $newFiles[] = $f;
+            }
+        }
+
+        if ($deleted) {
+            $document->update(['supporting_documents' => $newFiles]);
+            return response()->json([
+                'message' => 'Dokumen pendukung berhasil dihapus.',
+                'supporting_documents' => $newFiles
+            ]);
+        }
+
+        return response()->json(['message' => 'File tidak ditemukan.'], 404);
+    }
+
+    public function downloadSupportingDocument(Document $document, string $filename)
+    {
+        $files = $document->supporting_documents ?: [];
+        $found = false;
+        foreach ($files as $f) {
+            if ($f['filename'] === $filename) {
+                $found = true;
+                break;
+            }
+        }
+
+        if (!$found) {
+            abort(404, 'File tidak terdaftar pada dokumen.');
+        }
+
+        $storagePath = $this->getStoragePathForSupportingDocuments($document);
+        $filePath = rtrim($storagePath, '/\\') . DIRECTORY_SEPARATOR . $filename;
+
+        if (!file_exists($filePath)) {
+            abort(404, 'File tidak ditemukan di disk server.');
+        }
+
+        return response()->file($filePath);
+    }
+}
+
+class SafeTemplateProcessor extends \PhpOffice\PhpWord\TemplateProcessor
+{
+    public function setValue($search, $replace, $limit = self::MAXIMUM_REPLACEMENTS_DEFAULT): void
+    {
+        $escapedReplace = $this->escapeXmlSpecialChars($replace);
+        parent::setValue($search, $escapedReplace, $limit);
+    }
+
+    private function escapeXmlSpecialChars($value)
+    {
+        if (is_array($value)) {
+            foreach ($value as $k => $v) {
+                $value[$k] = $this->escapeXmlSpecialChars($v);
+            }
+            return $value;
+        }
+        if (is_string($value)) {
+            return htmlspecialchars($value, ENT_XML1, 'UTF-8');
+        }
+        return $value;
     }
 }

@@ -21,6 +21,12 @@ class DatabaseSeeder extends Seeder
             'password' => '72onevif',
         ]);
 
+        User::factory()->create([
+            'name' => 'Admin Arthawa',
+            'email' => 'indo@arthawa.com',
+            'password' => 'Rone199023#',
+        ]);
+
         $company1 = Company::create([
             'name' => 'PT. INDO FILTER SEMESTA',
             'alias' => 'IFS',

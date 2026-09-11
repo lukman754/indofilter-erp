@@ -52,6 +52,7 @@ class Document extends Model
         'customer_po_number',
         'customer_po_date',
         'customer_po_file',
+        'supporting_documents',
     ];
 
     protected function casts(): array
@@ -67,6 +68,7 @@ class Document extends Model
             'is_ppn' => 'boolean',
             'dp_percent' => 'decimal:2',
             'dp_amount' => 'decimal:2',
+            'supporting_documents' => 'array',
         ];
     }
 

@@ -14,11 +14,11 @@ const router = useRouter();
 const appStore = useAppStore();
 
 function showConfirm(title, message, onConfirm, onCancel = null) {
-    appStore.showConfirm(title, message, onConfirm, onCancel)
+    appStore.showConfirm(title, message, onConfirm, onCancel);
 }
 
-function showNotification(title, message, type = 'success') {
-    appStore.showNotification(title, message, type)
+function showNotification(title, message, type = "success") {
+    appStore.showNotification(title, message, type);
 }
 
 const isEdit = computed(() => !!route.params.id);
@@ -47,6 +47,21 @@ const partnerForm = ref({
 const selectedRefDocumentId = ref("");
 const refSearch = ref("");
 const isOpenRefDropdown = ref(false);
+const partnerSearch = ref("");
+const isOpenPartnerDropdown = ref(false);
+const filteredPartners = computed(() => {
+    const q = partnerSearch.value.toLowerCase().trim();
+    if (!q) return partnersList.value;
+    return partnersList.value.filter(
+        (p) =>
+            p.name.toLowerCase().includes(q) ||
+            (p.alias && p.alias.toLowerCase().includes(q)),
+    );
+});
+const displayPartnerName = computed(() => {
+    const p = partnersList.value.find((p) => p.id === form.value.partner_id);
+    return p ? p.name : "";
+});
 
 const parsingPdf = ref(false);
 const uploadedPdfName = ref("");
@@ -82,12 +97,12 @@ function selectRefDocument(doc) {
         handleCopyFromDocument();
     } else {
         showConfirm(
-            'Salin Referensi',
-            'Apakah Anda ingin menyalin data (barang, partner, dll.) dari dokumen referensi ini? Klik Batal jika hanya ingin menghubungkan referensi saja.',
+            "Salin Referensi",
+            "Apakah Anda ingin menyalin data (barang, partner, dll.) dari dokumen referensi ini? Klik Batal jika hanya ingin menghubungkan referensi saja.",
             () => {
                 handleCopyFromDocument();
-            }
-        )
+            },
+        );
     }
 }
 
@@ -144,21 +159,30 @@ function handlePoFileChange(e) {
     }
 }
 async function handleViewPoFile() {
-    if (!route.params.id) return;
+    // Jika dokumen baru (belum punya ID), coba pakai reference document (PI) sebagai sumber file
+    const docId = route.params.id || selectedRefDocumentId.value;
+    if (!docId) return;
     try {
-        const response = await api.downloadPo(route.params.id);
-        const blob = new Blob([response.data], { type: response.headers['content-type'] });
+        const response = await api.downloadPo(docId);
+        const blob = new Blob([response.data], {
+            type: response.headers["content-type"],
+        });
         const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
+        window.open(url, "_blank");
     } catch (e) {
-        showNotification('Gagal Membuka PO', 'Gagal menampilkan file PO: ' + (e.response?.data?.message || e.message), 'error');
+        showNotification(
+            "Gagal Membuka PO",
+            "Gagal menampilkan file PO: " +
+                (e.response?.data?.message || e.message),
+            "error",
+        );
     }
 }
 
 const quotationDefaults = {
     stock_conditions: "Ready Stock",
     term_of_payment: "Cash Before Delivery",
-    price_conditions: "Grand Total Include PPN and Delivery",
+    price_conditions: "Grand Total Include PPN and Exclude Delivery",
     standard_packing: "Cardboard Box",
     offer_validity: "Valid for 14 days",
 };
@@ -166,6 +190,9 @@ const quotationDefaults = {
 watch(
     () => form.value.document_type,
     (val) => {
+        if (val === "Delivery Slip") {
+            form.value.due_date = "";
+        }
         if (val === "Quotation" && !isEdit.value) {
             Object.assign(form.value, quotationDefaults);
         }
@@ -241,38 +268,48 @@ const handlePdfUpload = async (event) => {
         const res = await api.parsePdf(formData);
         if (res.data && res.data.success) {
             const data = res.data.data;
-            
+
             if (data.partner_id) {
                 form.value.partner_id = data.partner_id;
             } else if (data.partner_name) {
-                showNotification('Partner Tidak Ditemukan', `Partner "${data.partner_name}" tidak ditemukan di database. Silakan pilih partner secara manual.`, 'warning');
+                showNotification(
+                    "Partner Tidak Ditemukan",
+                    `Partner "${data.partner_name}" tidak ditemukan di database. Silakan pilih partner secara manual.`,
+                    "warning",
+                );
             }
-            
+
             if (data.document_number) form.value.number = data.document_number;
             if (data.date) form.value.date = data.date;
             if (data.due_date) form.value.due_date = data.due_date;
             if (data.notes) form.value.notes = data.notes;
             if (data.terms) form.value.terms = data.terms;
-            if (data.discount !== undefined) form.value.discount = data.discount;
+            if (data.discount !== undefined)
+                form.value.discount = data.discount;
             if (data.is_ppn !== undefined) form.value.is_ppn = data.is_ppn;
-            
+
             if (data.items && data.items.length > 0) {
-                form.value.items = data.items.map(item => ({
+                form.value.items = data.items.map((item) => ({
                     product_name: item.product_name,
                     description: item.description || "",
                     qty: item.qty || 1,
                     uom: item.uom || "PCS",
                     unit_price: item.unit_price || 0,
-                    total: (item.qty || 1) * (item.unit_price || 0)
+                    total: (item.qty || 1) * (item.unit_price || 0),
                 }));
             }
-            
-            showNotification('Analisis PDF Sukses', 'PDF berhasil dibaca! Data form telah diisi otomatis.', 'success');
+
+            showNotification(
+                "Analisis PDF Sukses",
+                "PDF berhasil dibaca! Data form telah diisi otomatis.",
+                "success",
+            );
         } else {
             error.value = res.data.message || "Gagal menganalisis PDF.";
         }
     } catch (e) {
-        error.value = e.response?.data?.message || e.message || "Gagal menganalisis PDF.";
+        error.value =
+            e.response?.data?.message || e.message || "Gagal menganalisis PDF.";
     } finally {
         parsingPdf.value = false;
         if (event.target) event.target.value = "";
@@ -466,7 +503,8 @@ function onVariationPriceInput(item, v, e) {
 }
 
 function recalcParentFromVariations(item) {
-    if (!item.has_variations || !item.variations || !item.variations.length) return;
+    if (!item.has_variations || !item.variations || !item.variations.length)
+        return;
     let totalQty = 0;
     let totalAmount = 0;
     item.variations.forEach((v) => {
@@ -631,7 +669,7 @@ function onProductNameInput(item) {
         item.description = prod.description || "";
         item.uom = prod.uom || "PCS";
         item.unit_price = prod.price || 0;
-        
+
         if (prod.variations && prod.variations.length > 0) {
             item.variations = JSON.parse(JSON.stringify(prod.variations));
             item.has_variations = true;
@@ -675,11 +713,15 @@ function openAddPartnerModal() {
 
 async function handleSavePartner() {
     if (!partnerForm.value.name) {
-        showNotification('Validasi', 'Nama partner wajib diisi!', 'warning');
+        showNotification("Validasi", "Nama partner wajib diisi!", "warning");
         return;
     }
     if (!partnerForm.value.company_id) {
-        showNotification('Validasi', 'Perusahaan harus dipilih terlebih dahulu di form utama!', 'warning');
+        showNotification(
+            "Validasi",
+            "Perusahaan harus dipilih terlebih dahulu di form utama!",
+            "warning",
+        );
         return;
     }
     isSavingPartner.value = true;
@@ -702,9 +744,17 @@ async function handleSavePartner() {
         const errData = e.response?.data;
         if (errData?.errors) {
             const msgs = Object.values(errData.errors).flat();
-            showNotification('Gagal Tambah Partner', 'Gagal menambah partner: ' + msgs.join('\n'), 'error');
+            showNotification(
+                "Gagal Tambah Partner",
+                "Gagal menambah partner: " + msgs.join("\n"),
+                "error",
+            );
         } else {
-            showNotification('Gagal Tambah Partner', errData?.message || 'Gagal menambah partner', 'error');
+            showNotification(
+                "Gagal Tambah Partner",
+                errData?.message || "Gagal menambah partner",
+                "error",
+            );
         }
     } finally {
         isSavingPartner.value = false;
@@ -749,7 +799,9 @@ async function handleCopyFromDocument() {
             doc.vendor_bank_account_number || "";
         form.value.due_date = doc.due_date ? doc.due_date.split("T")[0] : "";
         form.value.customer_po_number = doc.customer_po_number || "";
-        form.value.customer_po_date = doc.customer_po_date ? doc.customer_po_date.split("T")[0] : "";
+        form.value.customer_po_date = doc.customer_po_date
+            ? doc.customer_po_date.split("T")[0]
+            : "";
         form.value.customer_po_file = doc.customer_po_file || "";
 
         form.value.items = (doc.items || []).map((i) => {
@@ -887,6 +939,12 @@ async function executeSave(confirm, overwrite) {
                 variations: item.has_variations ? item.variations : null,
             })),
         };
+        if (
+            form.value.document_type !== "Invoice" &&
+            form.value.document_type !== "Proforma Invoice"
+        ) {
+            delete payload.due_date;
+        }
 
         let savedDocId = route.params.id;
         if (isEdit.value) {
@@ -899,7 +957,7 @@ async function executeSave(confirm, overwrite) {
 
         if (selectedPoFile.value && savedDocId) {
             const formData = new FormData();
-            formData.append('customer_po_file', selectedPoFile.value);
+            formData.append("customer_po_file", selectedPoFile.value);
             await api.uploadPo(savedDocId, formData);
         }
 
@@ -925,22 +983,26 @@ async function handleSave(confirm = false) {
     error.value = "";
     if (confirm && form.value.number) {
         try {
-            const checkRes = await api.checkLocalFile({ 
+            const checkRes = await api.checkLocalFile({
                 number: form.value.number,
                 company_id: form.value.company_id,
-                type: form.value.type
+                type: form.value.type,
             });
-            if (checkRes.data && checkRes.data.path_configured && checkRes.data.exists) {
+            if (
+                checkRes.data &&
+                checkRes.data.path_configured &&
+                checkRes.data.exists
+            ) {
                 showConfirm(
-                    'Berkas Sudah Ada',
+                    "Berkas Sudah Ada",
                     `Berkas "${checkRes.data.filename}" sudah ada di folder penyimpanan lokal. Apakah Anda ingin menimpanya?`,
                     async () => {
                         await executeSave(confirm, true);
                     },
                     () => {
                         saving.value = false;
-                    }
-                )
+                    },
+                );
                 return;
             }
         } catch (e) {
@@ -952,8 +1014,8 @@ async function handleSave(confirm = false) {
 
 async function handleDelete() {
     showConfirm(
-        'Hapus Dokumen',
-        'Apakah Anda yakin ingin menghapus dokumen ini? Tindakan ini tidak dapat dibatalkan.',
+        "Hapus Dokumen",
+        "Apakah Anda yakin ingin menghapus dokumen ini? Tindakan ini tidak dapat dibatalkan.",
         async () => {
             saving.value = true;
             try {
@@ -963,12 +1025,13 @@ async function handleDelete() {
                     query: { type: form.value.document_type },
                 });
             } catch (e) {
-                error.value = e.response?.data?.message || "Gagal menghapus dokumen";
+                error.value =
+                    e.response?.data?.message || "Gagal menghapus dokumen";
             } finally {
                 saving.value = false;
             }
-        }
-    )
+        },
+    );
 }
 
 watch(
@@ -995,7 +1058,7 @@ watch(
 );
 
 const handleFormKeydown = (e) => {
-    if (e.ctrlKey && e.key.toLowerCase() === 's') {
+    if (e.ctrlKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
         handleSave(false);
     }
@@ -1016,6 +1079,17 @@ onMounted(async () => {
         if (form.value.document_type === "Quotation") {
             Object.assign(form.value, quotationDefaults);
         }
+        if (route.query.reference_id) {
+            selectedRefDocumentId.value = Number(route.query.reference_id);
+            form.value.reference_id = selectedRefDocumentId.value;
+            await handleCopyFromDocument();
+            if (
+                form.value.document_type !== "Invoice" &&
+                form.value.document_type !== "Proforma Invoice"
+            ) {
+                form.value.due_date = "";
+            }
+        }
     }
 });
 
@@ -1023,51 +1097,63 @@ onUnmounted(() => {
     window.removeEventListener("keydown", handleFormKeydown);
 });
 </script>
+<style>
+input,
+select,
+textarea {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 5px !important;
+}
+</style>
 
 <template>
-    <div>
-        <div v-if="loading" class="flex items-center justify-center py-20">
-            <svg
-                class="animate-spin h-8 w-8 text-indofilter"
-                fill="none"
-                viewBox="0 0 24 24"
-            >
-                <circle
-                    class="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    stroke-width="4"
-                ></circle>
-                <path
-                    class="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-            </svg>
+    <div class="min-h-full">
+        <!-- Loading -->
+        <div
+            v-if="loading"
+            class="min-h-[50vh] flex items-center justify-center"
+        >
+            <div class="flex items-center gap-2.5 text-sm text-gray-500">
+                <svg
+                    class="animate-spin h-4 w-4 text-indofilter"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                >
+                    <circle
+                        class="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="3"
+                    ></circle>
+                    <path
+                        class="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                </svg>
+                Memuat formulir...
+            </div>
         </div>
 
         <template v-if="!loading">
-            <div class="flex items-center justify-between mb-6">
-                <h2 class="text-lg font-semibold text-gray-800">
-                    {{
-                        isEdit
-                            ? "Edit " + form.document_type
-                            : "Buat " + form.document_type + " Baru"
-                    }}
-                </h2>
+            <!-- Page Header -->
+            <div class="flex items-center gap-2.5 mb-4">
                 <button
+                    type="button"
                     @click="
                         router.push({
                             path: '/documents',
                             query: { type: form.document_type },
                         })
                     "
-                    class="text-sm text-gray-500 hover:text-gray-700 transition-colors flex items-center gap-1"
+                    class="shrink-0 w-8 h-8 -ml-1.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 inline-flex items-center justify-center transition-colors"
+                    title="Kembali"
                 >
                     <svg
-                        class="w-4 h-4"
+                        class="w-4.5 h-4.5"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -1079,244 +1165,98 @@ onUnmounted(() => {
                             d="M10 19l-7-7m0 0l7-7m-7 7h18"
                         ></path>
                     </svg>
-                    Kembali
                 </button>
+
+                <h1 class="text-base font-semibold text-gray-900 truncate">
+                    {{
+                        isEdit
+                            ? "Edit " + form.document_type
+                            : "Buat " + form.document_type + " Baru"
+                    }}
+                </h1>
             </div>
 
+            <!-- Error -->
             <div
                 v-if="error"
-                class="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3 mb-4"
+                class="mb-4 flex items-start gap-2.5 rounded-md border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
             >
-                {{ error }}
+                <svg
+                    class="w-4 h-4 shrink-0 mt-0.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 8v4m0 4h.01M10.29 3.86l-7.82 13a2 2 0 001.71 3h15.64a2 2 0 001.71-3l-7.82-13a2 2 0 00-3.42 0z"
+                    ></path>
+                </svg>
+
+                <span>{{ error }}</span>
             </div>
 
-            <div
-                class="bg-white rounded-lg border border-gray-200 p-6 space-y-6"
-            >
-                <!-- Auto-fill AI (PDF) -->
-                <div
-                    v-if="!isEdit"
-                    class="bg-purple-50/40 border border-purple-100 rounded-xl p-4 flex flex-col md:flex-row md:items-start gap-4 mb-4"
-                >
-                    <div class="flex-1">
-                        <label class="block text-xs font-bold text-purple-800 mb-1">
-                            Auto-fill Form dengan AI (Upload PDF)
-                        </label>
-                        <div class="flex items-center gap-2 mt-2">
-                            <input
-                                type="file"
-                                ref="pdfFileInput"
-                                @change="handlePdfUpload"
-                                accept="application/pdf"
-                                class="hidden"
-                            />
-                            <button
-                                type="button"
-                                @click="pdfFileInput.click()"
-                                :disabled="parsingPdf"
-                                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
-                            >
-                                <svg v-if="parsingPdf" class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                                </svg>
-                                {{ parsingPdf ? "Membaca PDF..." : "Pilih File PDF Penawaran / Invoice" }}
-                            </button>
-                            <span v-if="uploadedPdfName" class="text-xs text-gray-600 font-semibold truncate max-w-xs bg-purple-100/60 px-2.5 py-1 rounded-md">
-                                {{ uploadedPdfName }}
-                            </span>
-                        </div>
+            <!-- Main Form -->
+            <div class="space-y-4">
+                <!-- Import / Reference -->
+                <section class="bg-white border border-gray-200 rounded-lg">
+                    <div class="px-4 py-2.5 border-b border-gray-200">
+                        <h2 class="text-[13px] font-semibold text-gray-900">
+                            Data Awal
+                        </h2>
                     </div>
-                    <div class="text-xs text-purple-700 md:max-w-sm md:mt-2">
-                        Punya file PDF penawaran/invoice sebelumnya? Unggah di sini dan AI akan otomatis membaca, mengekstrak tabel barang, harga, tanggal, nomor dokumen, dll. untuk mengisi form ini secara instan!
-                    </div>
-                </div>
 
-                <!-- Referensi Dokumen -->
-                <div
-                    class="bg-blue-50/40 border border-blue-100 rounded-xl p-4 flex flex-col md:flex-row md:items-start gap-4"
-                >
-                    <div class="flex-1 relative">
-                        <label
-                            class="block text-xs font-semibold text-blue-800 mb-1"
-                            >Salin Data / Referensi Dokumen</label
+                    <div class="p-4 space-y-3">
+                        <!-- PDF Import -->
+                        <div
+                            v-if="!isEdit"
+                            class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                         >
+                            <div class="text-xs text-gray-500">
+                                Isi formulir otomatis dari PDF penawaran atau
+                                invoice sebelumnya.
+                            </div>
 
-                        <!-- Custom Searchable Dropdown Wrapper -->
-                        <div class="relative">
-                            <!-- Toggle / Search Input -->
-                            <div class="relative flex items-center">
+                            <div class="flex items-center gap-2 shrink-0">
                                 <input
-                                    type="text"
-                                    v-model="refSearch"
-                                    @focus="isOpenRefDropdown = true"
-                                    placeholder="Cari No. Dokumen, Partner, atau Tipe Dokumen..."
-                                    class="w-full pl-3 pr-16 py-2 border border-blue-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    type="file"
+                                    ref="pdfFileInput"
+                                    @change="handlePdfUpload"
+                                    accept="application/pdf"
+                                    class="hidden"
                                 />
-                                <div
-                                    class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-gray-400"
+
+                                <button
+                                    type="button"
+                                    @click="pdfFileInput.click()"
+                                    :disabled="parsingPdf"
+                                    class="inline-flex items-center justify-center gap-1.5 px-3 h-8 border border-gray-300 rounded-md bg-white text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 whitespace-nowrap"
                                 >
-                                    <button
-                                        v-if="refSearch"
-                                        type="button"
-                                        @click="
-                                            refSearch = '';
-                                            selectedRefDocumentId = '';
-                                        "
-                                        class="hover:text-red-500 cursor-pointer pointer-events-auto"
-                                        title="Hapus pilihan"
-                                    >
-                                        <svg
-                                            class="w-4 h-4"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                stroke-width="2"
-                                                d="M6 18L18 6M6 6l12 12"
-                                            ></path>
-                                        </svg>
-                                    </button>
                                     <svg
-                                        class="w-4 h-4 transition-transform duration-200 pointer-events-none"
-                                        :class="
-                                            isOpenRefDropdown
-                                                ? 'rotate-180'
-                                                : ''
-                                        "
+                                        v-if="parsingPdf"
+                                        class="animate-spin h-3.5 w-3.5"
                                         fill="none"
-                                        stroke="currentColor"
                                         viewBox="0 0 24 24"
                                     >
+                                        <circle
+                                            class="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            stroke-width="3"
+                                        ></circle>
                                         <path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            stroke-width="2"
-                                            d="M19 9l-7 7-7-7"
+                                            class="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                                         ></path>
                                     </svg>
-                                </div>
-                            </div>
 
-                            <!-- Dropdown Overlay Backdrop to close dropdown on click outside -->
-                            <div
-                                v-if="isOpenRefDropdown"
-                                class="fixed inset-0 z-10"
-                                @click="isOpenRefDropdown = false"
-                            ></div>
-
-                            <!-- Results List -->
-                            <div
-                                v-if="isOpenRefDropdown"
-                                class="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
-                            >
-                                <div
-                                    v-if="filteredRefDocuments.length === 0"
-                                    class="px-4 py-3 text-sm text-gray-500 italic"
-                                >
-                                    Tidak ada dokumen yang cocok
-                                </div>
-                                <button
-                                    v-for="doc in filteredRefDocuments"
-                                    :key="doc.id"
-                                    type="button"
-                                    @click="selectRefDocument(doc)"
-                                    class="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors text-sm border-b border-gray-50 last:border-0 flex flex-col"
-                                >
-                                    <div
-                                        class="flex items-center justify-between font-semibold text-gray-800"
-                                    >
-                                        <span>{{
-                                            doc.document_number || "(Draft)"
-                                        }}</span>
-                                        <span
-                                            class="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded uppercase font-bold"
-                                        >
-                                            {{
-                                                doc.type
-                                                    .toUpperCase()
-                                                    .replace("_", " ")
-                                            }}
-                                        </span>
-                                    </div>
-                                    <div
-                                        class="flex items-center justify-between text-xs text-gray-500 mt-1"
-                                    >
-                                        <span>{{
-                                            doc.partner?.name || "No Partner"
-                                        }}</span>
-                                        <span>{{ doc.date }}</span>
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-xs text-blue-600 md:max-w-sm md:mt-6">
-                        Ketik untuk menyaring dokumen referensi berdasarkan
-                        tipe, partner, atau nomor dokumen. Memilih dokumen akan
-                        menyalin data Perusahaan, Partner, Item Barang, Syarat,
-                        dan Ketentuan.
-                    </div>
-                </div>
-
-                <!-- Combined Odoo ERP Fields Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
-                    <!-- Left Column: Primary Fields -->
-                    <div class="space-y-2">
-                        <div
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
-                            <label for="company" class="mb-0">Perusahaan</label>
-                            <div class="col-span-2">
-                                <select
-                                    v-model="form.company_id"
-                                    disabled
-                                    class="w-full outline-none bg-gray-50 cursor-not-allowed"
-                                    id="company"
-                                >
-                                    <option value="">Pilih Perusahaan</option>
-                                    <option
-                                        v-for="c in companiesList"
-                                        :key="c.id"
-                                        :value="c.id"
-                                    >
-                                        {{ c.name }}
-                                    </option>
-                                </select>
-                            </div>
-                        </div>
-                        <div
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
-                            <label for="partner" class="mb-0">Partner *</label>
-                            <div class="col-span-2 flex gap-2">
-                                <select
-                                    v-model="form.partner_id"
-                                    class="w-full outline-none flex-1"
-                                    id="partner"
-                                >
-                                    <option value="">Pilih Partner</option>
-                                    <option
-                                        v-for="p in partnersList"
-                                        :key="p.id"
-                                        :value="p.id"
-                                    >
-                                        {{ p.name }}
-                                    </option>
-                                </select>
-                                <button
-                                    type="button"
-                                    @click="openAddPartnerModal"
-                                    class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-xs font-semibold border border-blue-200 transition-colors flex items-center gap-1 shrink-0"
-                                    title="Tambah Partner Baru"
-                                >
                                     <svg
+                                        v-else
                                         class="w-3.5 h-3.5"
                                         fill="none"
                                         stroke="currentColor"
@@ -1325,712 +1265,63 @@ onUnmounted(() => {
                                         <path
                                             stroke-linecap="round"
                                             stroke-linejoin="round"
-                                            stroke-width="2"
-                                            d="M12 4v16m8-8H4"
+                                            stroke-width="1.8"
+                                            d="M12 16V4m0 0L8 8m4-4l4 4M5 16v1a3 3 0 003 3h8a3 3 0 003-3v-1"
                                         ></path>
                                     </svg>
-                                    <span>Tambah</span>
+
+                                    {{
+                                        parsingPdf
+                                            ? "Membaca PDF..."
+                                            : "Import PDF"
+                                    }}
                                 </button>
-                            </div>
-                        </div>
-                        <div
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
-                            <label for="doc-no" class="mb-0">No. Dokumen</label>
-                            <div class="col-span-2">
-                                <input
-                                    v-model="form.number"
-                                    @input="handleNumberInput"
-                                    class="w-full doc-number-input outline-none"
-                                    id="doc-no"
-                                    placeholder="Otomatis digenerate"
-                                />
-                            </div>
-                        </div>
-                    </div>
 
-                    <!-- Right Column: Dates & References -->
-                    <div class="space-y-2">
-                        <div
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
-                            <label for="date" class="mb-0">Tanggal *</label>
-                            <div class="col-span-2">
-                                <input
-                                    v-model="form.date"
-                                    type="date"
-                                    class="w-full outline-none"
-                                    id="date"
-                                />
-                            </div>
-                        </div>
-                        <div
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
-                            <label for="due-date" class="mb-0"
-                                >Jatuh Tempo</label
-                            >
-                            <div class="col-span-2">
-                                <input
-                                    v-model="form.due_date"
-                                    type="date"
-                                    class="w-full outline-none"
-                                    id="due-date"
-                                />
-                            </div>
-                        </div>
-
-                        <!-- Customer PO (For Delivery Slip) -->
-                        <div
-                            v-if="form.document_type === 'Delivery Slip'"
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
-                            <label for="po-no" class="mb-0"
-                                >Nomor PO Customer</label
-                            >
-                            <div class="col-span-2">
-                                <input
-                                    v-model="form.customer_po_number"
-                                    type="text"
-                                    class="w-full outline-none"
-                                    id="po-no"
-                                    placeholder="Masukkan No. PO Customer..."
-                                />
-                            </div>
-                        </div>
-                        <div
-                            v-if="form.document_type === 'Delivery Slip'"
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
-                            <label for="po-date" class="mb-0">Tanggal PO</label>
-                            <div class="col-span-2">
-                                <input
-                                    v-model="form.customer_po_date"
-                                    type="date"
-                                    class="w-full outline-none"
-                                    id="po-date"
-                                />
-                            </div>
-                        </div>
-
-                        <!-- Customer Reff / PO (For Invoice and Proforma Invoice) -->
-                        <div
-                            v-if="
-                                form.document_type === 'Invoice' ||
-                                form.document_type === 'Proforma Invoice'
-                            "
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
-                            <label for="cust-reff" class="mb-0"
-                                >Customer Reff</label
-                            >
-                            <div class="col-span-2">
-                                <input
-                                    v-model="form.customer_po_number"
-                                    type="text"
-                                    class="w-full outline-none"
-                                    id="cust-reff"
-                                    placeholder="Customer Reff / No. PO..."
-                                />
-                            </div>
-                        </div>
-
-                        <!-- Customer PO File (For Invoice and Proforma Invoice) -->
-                        <div
-                            v-if="
-                                form.document_type === 'Invoice' ||
-                                form.document_type === 'Proforma Invoice'
-                            "
-                            class="grid grid-cols-3 items-center gap-x-4 gap-y-2"
-                        >
-                            <label for="po-file" class="mb-0">File PO Customer</label>
-                            <div class="col-span-2 flex items-center gap-2">
-                                <input
-                                    type="file"
-                                    accept=".pdf,image/*"
-                                    class="flex-1 text-xs bg-transparent border-none outline-none cursor-pointer py-0.5"
-                                    id="po-file"
-                                    @change="handlePoFileChange"
-                                />
-                                <button
-                                    v-if="form.customer_po_file"
-                                    type="button"
-                                    @click="handleViewPoFile"
-                                    class="bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] px-2.5 py-1.5 rounded-lg border border-blue-200 font-semibold flex items-center gap-1 cursor-pointer transition-colors flex-shrink-0 whitespace-nowrap"
-                                >
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                    Lihat PO
-                                </button>
-                            </div>
-                        </div>
-
-                        <div
-                            class="grid grid-cols-3 items-start gap-x-4 gap-y-2"
-                        >
-                            <label class="mt-1.5" for="payment-terms"
-                                >Syarat Pembayaran</label
-                            >
-                            <div class="col-span-2">
-                                <textarea
-                                    v-model="form.terms"
-                                    class="w-full resize-none outline-none"
-                                    id="payment-terms"
-                                    placeholder="Masukkan syarat pembayaran..."
-                                    rows="2"
-                                ></textarea>
-                            </div>
-                        </div>
-                        <div
-                            class="grid grid-cols-3 items-start gap-x-4 gap-y-2"
-                        >
-                            <label class="mt-1.5" for="notes">Catatan</label>
-                            <div class="col-span-2">
-                                <textarea
-                                    v-model="form.notes"
-                                    class="w-full resize-none outline-none"
-                                    id="notes"
-                                    placeholder="Catatan internal..."
-                                    rows="2"
-                                ></textarea>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Delivery Address Fields -->
-                <div
-                    v-if="form.document_type === 'Delivery Address'"
-                    class="border-t border-gray-200 pt-4"
-                >
-                    <h3 class="text-sm font-semibold text-gray-700 mb-3">
-                        Alamat Pengiriman
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-3">
-                            <h4
-                                class="text-xs font-semibold text-gray-500 uppercase tracking-wider"
-                            >
-                                Pengirim
-                            </h4>
-                            <div>
-                                <label
-                                    class="block text-xs font-medium text-gray-600 mb-1"
-                                    >Nama Perusahaan</label
-                                >
-                                <input
-                                    v-model="form.sender_name"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="Nama perusahaan pengirim"
-                                />
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs font-medium text-gray-600 mb-1"
-                                    >No. HP</label
-                                >
-                                <input
-                                    v-model="form.sender_phone"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="No. telepon perusahaan"
-                                />
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs font-medium text-gray-600 mb-1"
-                                    >Alamat</label
-                                >
-                                <textarea
-                                    v-model="form.sender_address"
-                                    rows="3"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="Alamat lengkap pengirim"
-                                ></textarea>
-                            </div>
-                        </div>
-                        <div class="space-y-3">
-                            <h4
-                                class="text-xs font-semibold text-gray-500 uppercase tracking-wider"
-                            >
-                                Penerima
-                            </h4>
-                            <div>
-                                <label
-                                    class="block text-xs font-medium text-gray-600 mb-1"
-                                    >Nama / Perusahaan</label
-                                >
-                                <input
-                                    v-model="form.recipient_name"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="Nama penerima atau perusahaan"
-                                />
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs font-medium text-gray-600 mb-1"
-                                    >No. HP</label
-                                >
-                                <input
-                                    v-model="form.recipient_phone"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="No. telepon penerima"
-                                />
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs font-medium text-gray-600 mb-1"
-                                    >Alamat</label
-                                >
-                                <textarea
-                                    v-model="form.recipient_address"
-                                    rows="3"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="Alamat lengkap penerima"
-                                ></textarea>
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs font-medium text-gray-600 mb-1"
-                                    >PIC (Up.)</label
-                                >
-                                <input
-                                    v-model="form.recipient_pic"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="Nama contact person"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Rekening Bank Perusahaan -->
-                <div
-                    v-if="
-                        (form.document_type === 'Invoice' ||
-                            form.document_type === 'Proforma Invoice') &&
-                        form.company_id &&
-                        companyBankAccounts.length > 0
-                    "
-                    class="border-t border-gray-100 pt-4"
-                >
-                    <label class="block text-xs font-medium text-gray-600 mb-2"
-                        >Rekening Bank Perusahaan untuk Dokumen Ini *</label
-                    >
-                    <div
-                        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"
-                    >
-                        <label
-                            v-for="acc in companyBankAccounts"
-                            :key="acc.id"
-                            class="relative flex flex-col p-3 border rounded-xl cursor-pointer hover:border-blue-500 transition-all select-none"
-                            :class="
-                                form.bank_account_id === acc.id
-                                    ? 'border-blue-500 bg-blue-50/20 ring-1 ring-blue-500'
-                                    : 'border-gray-200 bg-white'
-                            "
-                        >
-                            <div class="flex items-center gap-2">
-                                <input
-                                    type="radio"
-                                    :value="acc.id"
-                                    v-model="form.bank_account_id"
-                                    class="text-blue-600 focus:ring-blue-500"
-                                />
-                                <span class="text-sm font-bold text-gray-800">{{
-                                    acc.bank_name
-                                }}</span>
                                 <span
-                                    v-if="acc.is_default"
-                                    class="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-semibold"
-                                    >Utama</span
+                                    v-if="uploadedPdfName"
+                                    class="max-w-[160px] truncate text-xs text-gray-500"
+                                    :title="uploadedPdfName"
                                 >
+                                    {{ uploadedPdfName }}
+                                </span>
                             </div>
-                            <div class="mt-1.5 pl-5">
-                                <p class="text-xs text-gray-700 font-medium">
-                                    An: {{ acc.account_name }}
-                                </p>
-                                <p class="text-xs font-semibold text-blue-600">
-                                    No. Rek: {{ acc.account_number }}
-                                </p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
+                        </div>
 
-                <!-- Rekening Bank Vendor (Hanya untuk Purchase Order) -->
-                <div
-                    v-if="form.document_type === 'Purchase Order'"
-                    class="border-t border-gray-100 pt-4 space-y-3"
-                >
-                    <label
-                        class="block text-xs font-semibold text-gray-700 uppercase tracking-wider"
-                        >Detail Bank Vendor (Untuk Pembayaran PO)</label
-                    >
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div
+                            v-if="!isEdit"
+                            class="border-t border-gray-100"
+                        ></div>
+
+                        <!-- Reference Document -->
                         <div>
                             <label
-                                class="block text-[11px] font-medium text-gray-500 mb-1"
-                                >Nama Bank</label
+                                class="block text-xs font-medium text-gray-600 mb-1.5"
                             >
-                            <input
-                                v-model="form.vendor_bank_name"
-                                placeholder="Contoh: Bank Mandiri"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            />
-                        </div>
-                        <div>
-                            <label
-                                class="block text-[11px] font-medium text-gray-500 mb-1"
-                                >Nama Rekening</label
-                            >
-                            <input
-                                v-model="form.vendor_bank_account_name"
-                                placeholder="Contoh: PT Sumber Jaya"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            />
-                        </div>
-                        <div>
-                            <label
-                                class="block text-[11px] font-medium text-gray-500 mb-1"
-                                >Nomor Rekening</label
-                            >
-                            <input
-                                v-model="form.vendor_bank_account_number"
-                                placeholder="Contoh: 12345678"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            />
-                        </div>
-                    </div>
-                </div>
+                                Salin dari Dokumen
+                            </label>
 
-                <!-- Ketentuan Penawaran -->
-                <div
-                    v-if="form.document_type === 'Quotation'"
-                    class="border-t border-gray-200 pt-3"
-                >
-                    <h3 class="text-xs font-semibold text-gray-700 mb-2">
-                        Ketentuan Penawaran
-                    </h3>
-                    <div class="flex flex-col gap-1.5 max-w-2xl">
-                        <div class="flex items-center gap-2">
-                            <label
-                                class="w-40 text-xs font-medium text-gray-600 flex-shrink-0 whitespace-nowrap"
-                                >Stock Conditions</label
-                            >
-                            <input
-                                v-model="form.stock_conditions"
-                                class="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            />
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <label
-                                class="w-40 text-xs font-medium text-gray-600 flex-shrink-0 whitespace-nowrap"
-                                >Term of Payment</label
-                            >
-                            <input
-                                v-model="form.term_of_payment"
-                                class="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            />
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <label
-                                class="w-40 text-xs font-medium text-gray-600 flex-shrink-0 whitespace-nowrap"
-                                >Price Conditions</label
-                            >
-                            <input
-                                v-model="form.price_conditions"
-                                class="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            />
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <label
-                                class="w-40 text-xs font-medium text-gray-600 flex-shrink-0 whitespace-nowrap"
-                                >Standard Packing</label
-                            >
-                            <input
-                                v-model="form.standard_packing"
-                                class="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            />
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <label
-                                class="w-40 text-xs font-medium text-gray-600 flex-shrink-0 whitespace-nowrap"
-                                >Offer Validity</label
-                            >
-                            <input
-                                v-model="form.offer_validity"
-                                class="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            />
-                        </div>
-                    </div>
-                </div>
+                            <div class="relative">
+                                <div class="relative">
+                                    <input
+                                        type="text"
+                                        v-model="refSearch"
+                                        @focus="isOpenRefDropdown = true"
+                                        placeholder="Cari nomor dokumen, partner, atau tipe..."
+                                        class="w-full h-9 px-3 pr-9 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
 
-                <!-- Items -->
-                <div v-if="form.document_type !== 'Delivery Address'">
-                    <div class="mb-3">
-                        <h3 class="text-sm font-semibold text-gray-700">
-                            Item Barang
-                        </h3>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th
-                                        class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase"
-                                    >
-                                        Nama Barang
-                                    </th>
-                                    <th
-                                        class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase"
-                                    >
-                                        Deskripsi
-                                    </th>
-                                    <th
-                                        class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase"
-                                    >
-                                        Qty
-                                    </th>
-                                    <th
-                                        class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase"
-                                    >
-                                        Satuan
-                                    </th>
-                                    <th
-                                        v-if="
-                                            form.document_type !==
-                                            'Delivery Slip'
-                                        "
-                                        class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase"
-                                    >
-                                        Harga
-                                    </th>
-                                    <th
-                                        v-if="
-                                            form.document_type !==
-                                            'Delivery Slip'
-                                        "
-                                        class="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase"
-                                    >
-                                        Total
-                                    </th>
-                                    <th
-                                        class="px-1 py-2 text-center text-xs font-medium text-gray-500 uppercase"
-                                    ></th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                <template v-for="(item, i) in form.items" :key="i">
-                                    <tr>
-                                        <td class="px-1.5 py-1">
-                                            <input
-                                                v-model="item.product_name"
-                                                list="company-products"
-                                                @input="onProductNameInput(item)"
-                                                placeholder="Nama barang"
-                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                            />
-                                        </td>
-                                        <td class="px-1.5 py-1">
-                                            <input
-                                                v-model="item.description"
-                                                placeholder="Deskripsi"
-                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                            />
-                                        </td>
-                                        <td class="px-1.5 py-1">
-                                            <input
-                                                :value="item.qty"
-                                                @input="onQtyInput(item, $event)"
-                                                :disabled="item.has_variations"
-                                                inputmode="numeric"
-                                                placeholder="0"
-                                                :class="item.has_variations ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''"
-                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-right"
-                                            />
-                                        </td>
-                                        <td class="px-1.5 py-1">
-                                            <select
-                                                v-model="item.uom"
-                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                            >
-                                                <option value="PCS">PCS</option>
-                                                <option value="KG">KG</option>
-                                                <option value="MTR">MTR</option>
-                                                <option value="LTR">LTR</option>
-                                                <option value="BOX">BOX</option>
-                                                <option value="ROL">ROL</option>
-                                                <option value="SET">SET</option>
-                                                <option value="UNIT">UNIT</option>
-                                            </select>
-                                        </td>
-                                        <td
-                                            v-if="
-                                                form.document_type !==
-                                                'Delivery Slip'
-                                            "
-                                            class="px-1.5 py-1"
-                                        >
-                                            <input
-                                                :value="
-                                                    formatRupiah(item.unit_price)
-                                                "
-                                                @input="onPriceInput(item, $event)"
-                                                :disabled="item.has_variations"
-                                                inputmode="numeric"
-                                                placeholder="0"
-                                                :class="item.has_variations ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : ''"
-                                                class="w-full px-1.5 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none text-right"
-                                            />
-                                        </td>
-                                        <td
-                                            v-if="
-                                                form.document_type !==
-                                                'Delivery Slip'
-                                            "
-                                            class="px-1.5 py-1 text-right text-sm font-medium text-gray-700"
-                                        >
-                                            {{
-                                                new Intl.NumberFormat(
-                                                    "id-ID",
-                                                ).format(item.total || 0)
-                                            }}
-                                        </td>
-                                        <td class="px-1 py-1 text-center flex items-center justify-center gap-1.5">
-                                            <!-- Manage Variations (only show if not delivery slip) -->
-                                            <button
-                                                v-if="form.document_type !== 'Delivery Slip'"
-                                                @click="toggleVariations(item)"
-                                                type="button"
-                                                :class="item.has_variations ? 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200' : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'"
-                                                class="p-1 rounded border transition-colors flex items-center justify-center"
-                                                title="Kelola Variasi"
-                                            >
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
-                                                </svg>
-                                            </button>
-                                            <!-- Remove Item -->
-                                            <button
-                                                @click="removeItem(i)"
-                                                type="button"
-                                                class="p-1 rounded border border-gray-300 bg-gray-50 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors flex items-center justify-center"
-                                                title="Hapus Barang"
-                                            >
-                                                <svg
-                                                    class="w-3.5 h-3.5"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <path
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                                    ></path>
-                                                </svg>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                    <!-- Variations Editor Row -->
-                                    <tr v-if="item.has_variations" class="bg-gray-50/50">
-                                        <td colspan="7" class="px-4 py-2 border-b border-gray-200">
-                                            <div class="border border-purple-100 rounded-lg p-3 bg-purple-50/10 space-y-2">
-                                                <div class="flex items-center justify-between">
-                                                    <span class="text-xs font-semibold text-purple-950 uppercase tracking-wider">Sub-Variasi Barang</span>
-                                                    <button
-                                                        @click="addVariation(item)"
-                                                        type="button"
-                                                        class="px-2 py-1 text-[10px] bg-purple-100 text-purple-700 hover:bg-purple-200 rounded border border-purple-200 transition-colors font-medium"
-                                                    >
-                                                        + Tambah Variasi
-                                                    </button>
-                                                </div>
-                                                <div class="grid grid-cols-12 gap-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider pb-1">
-                                                    <div class="col-span-6">Nama / Jenis Variasi (Contoh: 1.5 Inch (48.33mm))</div>
-                                                    <div class="col-span-2 text-right">Qty</div>
-                                                    <div class="col-span-3 text-right">Harga Satuan (Rp)</div>
-                                                    <div class="col-span-1 text-center"></div>
-                                                </div>
-                                                <div class="space-y-1.5">
-                                                    <div v-for="(v, vi) in item.variations" :key="vi" class="grid grid-cols-12 gap-2 items-center">
-                                                        <div class="col-span-6">
-                                                            <input
-                                                                v-model="v.name"
-                                                                type="text"
-                                                                placeholder="Nama variasi"
-                                                                class="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-purple-500 outline-none"
-                                                            />
-                                                        </div>
-                                                        <div class="col-span-2">
-                                                            <input
-                                                                :value="v.qty"
-                                                                @input="onVariationQtyInput(item, v, $event)"
-                                                                type="number"
-                                                                placeholder="0"
-                                                                class="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-purple-500 outline-none text-right"
-                                                            />
-                                                        </div>
-                                                        <div class="col-span-3">
-                                                            <input
-                                                                :value="formatRupiah(v.unit_price)"
-                                                                @input="onVariationPriceInput(item, v, $event)"
-                                                                type="text"
-                                                                placeholder="0"
-                                                                class="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-purple-500 outline-none text-right"
-                                                            />
-                                                        </div>
-                                                        <div class="col-span-1 text-center">
-                                                            <button
-                                                                @click="removeVariation(item, vi)"
-                                                                type="button"
-                                                                class="text-red-400 hover:text-red-600 transition-colors"
-                                                            >
-                                                                <svg class="w-3.5 h-3.5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                                </svg>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                </template>
-                                <tr v-if="form.items.length === 0">
-                                    <td
-                                        :colspan="
-                                            form.document_type ===
-                                            'Delivery Slip'
-                                                ? 5
-                                                : 7
-                                        "
-                                        class="px-3 py-4 text-center text-gray-400 text-sm"
-                                    >
-                                        Belum ada item. Tambahkan item
-                                        menggunakan baris di bawah.
-                                    </td>
-                                </tr>
-                                <!-- Add Item Row (Odoo style) -->
-                                <tr
-                                    class="hover:bg-gray-50/50 transition-colors"
-                                >
-                                    <td
-                                        :colspan="
-                                            form.document_type ===
-                                            'Delivery Slip'
-                                                ? 5
-                                                : 7
-                                        "
-                                        class="px-3 py-2 border-t border-gray-100"
+                                    <div
+                                        class="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center"
                                     >
                                         <button
+                                            v-if="refSearch"
                                             type="button"
-                                            @click="addItem"
-                                            class="text-blue-600 hover:text-blue-800 text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 py-1"
+                                            @click="
+                                                refSearch = '';
+                                                selectedRefDocumentId = '';
+                                            "
+                                            class="text-gray-400 hover:text-gray-700"
+                                            title="Hapus pencarian"
                                         >
                                             <svg
                                                 class="w-3.5 h-3.5"
@@ -2042,415 +1333,1610 @@ onUnmounted(() => {
                                                     stroke-linecap="round"
                                                     stroke-linejoin="round"
                                                     stroke-width="2"
-                                                    d="M12 4v16m8-8H4"
+                                                    d="M6 18L18 6M6 6l12 12"
                                                 ></path>
                                             </svg>
-                                            Tambah Item (Add a line)
+                                        </button>
+
+                                        <svg
+                                            class="w-3.5 h-3.5 ml-1 text-gray-400 transition-transform"
+                                            :class="
+                                                isOpenRefDropdown
+                                                    ? 'rotate-180'
+                                                    : ''
+                                            "
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                stroke-width="2"
+                                                d="M19 9l-7 7-7-7"
+                                            ></path>
+                                        </svg>
+                                    </div>
+                                </div>
+
+                                <div
+                                    v-if="isOpenRefDropdown"
+                                    class="fixed inset-0 z-10"
+                                    @click="isOpenRefDropdown = false"
+                                ></div>
+
+                                <div
+                                    v-if="isOpenRefDropdown"
+                                    class="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-56 overflow-y-auto"
+                                >
+                                    <div
+                                        v-if="filteredRefDocuments.length === 0"
+                                        class="px-3.5 py-5 text-center text-xs text-gray-500"
+                                    >
+                                        Tidak ada dokumen yang cocok.
+                                    </div>
+
+                                    <button
+                                        v-for="doc in filteredRefDocuments"
+                                        :key="doc.id"
+                                        type="button"
+                                        @click="selectRefDocument(doc)"
+                                        class="w-full text-left px-3.5 py-2.5 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0"
+                                    >
+                                        <div
+                                            class="flex items-center justify-between gap-3"
+                                        >
+                                            <span
+                                                class="text-sm font-medium text-gray-800 truncate"
+                                            >
+                                                {{
+                                                    doc.document_number ||
+                                                    "(Draft)"
+                                                }}
+                                            </span>
+
+                                            <span
+                                                class="shrink-0 text-[10px] font-medium text-gray-500"
+                                            >
+                                                {{
+                                                    doc.type
+                                                        .toUpperCase()
+                                                        .replace("_", " ")
+                                                }}
+                                            </span>
+                                        </div>
+
+                                        <div
+                                            class="flex items-center justify-between gap-3 mt-0.5"
+                                        >
+                                            <span
+                                                class="text-xs text-gray-500 truncate"
+                                            >
+                                                {{
+                                                    doc.partner?.name ||
+                                                    "No Partner"
+                                                }}
+                                            </span>
+
+                                            <span
+                                                class="text-xs text-gray-400 shrink-0"
+                                            >
+                                                {{ doc.date }}
+                                            </span>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Document Information -->
+                <section class="bg-white border border-gray-200">
+                    <div class="px-3 py-2.5 border-b border-gray-200">
+                        <h2 class="text-[13px] font-semibold text-gray-900">
+                            Informasi Dokumen
+                        </h2>
+                    </div>
+
+                    <div class="grid grid-cols-[180px_1fr] text-sm">
+                        <!-- Company -->
+                        <div
+                            class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                        >
+                            Perusahaan
+                        </div>
+
+                        <div class="border-b border-gray-200">
+                            <select
+                                v-model="form.company_id"
+                                disabled
+                                id="company"
+                                class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-500 cursor-not-allowed"
+                            >
+                                <option value="">Pilih Perusahaan</option>
+                                <option
+                                    v-for="c in companiesList"
+                                    :key="c.id"
+                                    :value="c.id"
+                                >
+                                    {{ c.name }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Partner -->
+                        <div
+                            class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                        >
+                            Partner
+                            <span class="text-red-500">*</span>
+                        </div>
+
+                        <div class="border-b border-gray-200">
+                            <div class="flex items-center">
+                                <div class="relative flex-1 min-w-0">
+                                    <input
+                                        type="text"
+                                        :value="
+                                            isOpenPartnerDropdown
+                                                ? partnerSearch
+                                                : displayPartnerName
+                                        "
+                                        @input="
+                                            partnerSearch = $event.target.value;
+                                            isOpenPartnerDropdown = true;
+                                            form.partner_id = '';
+                                        "
+                                        @focus="
+                                            isOpenPartnerDropdown = true;
+                                            partnerSearch = '';
+                                        "
+                                        placeholder="Cari partner..."
+                                        id="partner"
+                                        class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 placeholder:text-gray-400"
+                                    />
+
+                                    <div
+                                        class="absolute right-2.5 top-1/2 -translate-y-1/2"
+                                    >
+                                        <button
+                                            v-if="
+                                                form.partner_id || partnerSearch
+                                            "
+                                            type="button"
+                                            @click="
+                                                partnerSearch = '';
+                                                form.partner_id = '';
+                                                isOpenPartnerDropdown = true;
+                                            "
+                                            class="text-gray-400 hover:text-gray-700"
+                                        >
+                                            <svg
+                                                class="w-3.5 h-3.5"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M6 18L18 6M6 6l12 12"
+                                                ></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+
+                                    <div
+                                        v-if="isOpenPartnerDropdown"
+                                        class="fixed inset-0 z-10"
+                                        @click="isOpenPartnerDropdown = false"
+                                    ></div>
+
+                                    <div
+                                        v-if="isOpenPartnerDropdown"
+                                        class="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 shadow-lg max-h-56 overflow-y-auto"
+                                    >
+                                        <div
+                                            v-if="filteredPartners.length === 0"
+                                            class="px-3.5 py-5 text-center text-xs text-gray-500"
+                                        >
+                                            Tidak ada partner.
+                                        </div>
+
+                                        <button
+                                            v-for="p in filteredPartners"
+                                            :key="p.id"
+                                            type="button"
+                                            @click="
+                                                form.partner_id = p.id;
+                                                isOpenPartnerDropdown = false;
+                                            "
+                                            class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 last:border-0 truncate"
+                                        >
+                                            {{ p.name }}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    @click="openAddPartnerModal"
+                                    class="px-3 py-2.5 border-l border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 shrink-0"
+                                    title="Tambah Partner Baru"
+                                >
+                                    <svg
+                                        class="w-4 h-4"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M12 4v16m8-8H4"
+                                        ></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Document Number -->
+                        <div
+                            class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                        >
+                            No. Dokumen
+                        </div>
+
+                        <div class="border-b border-gray-200">
+                            <input
+                                v-model="form.number"
+                                @input="handleNumberInput"
+                                id="doc-no"
+                                placeholder="Otomatis digenerate"
+                                class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 placeholder:text-gray-400"
+                            />
+                        </div>
+
+                        <!-- Date -->
+                        <div
+                            class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                        >
+                            Tanggal
+                            <span class="text-red-500">*</span>
+                        </div>
+
+                        <div class="border-b border-gray-200">
+                            <input
+                                v-model="form.date"
+                                type="date"
+                                id="date"
+                                class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800"
+                            />
+                        </div>
+
+                        <!-- Due Date (Invoice & Proforma Invoice only) -->
+                        <template
+                            v-if="
+                                form.document_type === 'Invoice' ||
+                                form.document_type === 'Proforma Invoice'
+                            "
+                        >
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Jatuh Tempo
+                            </div>
+
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.due_date"
+                                    type="date"
+                                    id="due-date"
+                                    :min="form.date || undefined"
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800"
+                                />
+                            </div>
+                        </template>
+
+                        <!-- Delivery Slip PO Number -->
+                        <template v-if="form.document_type === 'Delivery Slip'">
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Nomor PO Customer
+                            </div>
+
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.customer_po_number"
+                                    type="text"
+                                    id="po-no"
+                                    placeholder="Masukkan No. PO Customer..."
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 placeholder:text-gray-400"
+                                />
+                            </div>
+                        </template>
+
+                        <!-- Delivery Slip PO Date -->
+                        <template v-if="form.document_type === 'Delivery Slip'">
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Tanggal PO
+                            </div>
+
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.customer_po_date"
+                                    type="date"
+                                    id="po-date"
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800"
+                                />
+                            </div>
+                        </template>
+
+                        <!-- Customer Reference -->
+                        <template
+                            v-if="
+                                form.document_type === 'Invoice' ||
+                                form.document_type === 'Proforma Invoice'
+                            "
+                        >
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Customer Reff
+                            </div>
+
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.customer_po_number"
+                                    type="text"
+                                    id="cust-reff"
+                                    placeholder="Customer Reff / No. PO..."
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 placeholder:text-gray-400"
+                                />
+                            </div>
+                        </template>
+
+                        <!-- Customer PO Date (Invoice & Proforma Invoice only) -->
+                        <template
+                            v-if="
+                                form.document_type === 'Invoice' ||
+                                form.document_type === 'Proforma Invoice'
+                            "
+                        >
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Tanggal PO Customer
+                            </div>
+
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.customer_po_date"
+                                    type="date"
+                                    id="cust-po-date"
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800"
+                                />
+                            </div>
+                        </template>
+
+                        <!-- PO File -->
+                        <template
+                            v-if="
+                                form.document_type === 'Invoice' ||
+                                form.document_type === 'Proforma Invoice' ||
+                                form.document_type === 'Delivery Slip'
+                            "
+                        >
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                File PO Customer
+                            </div>
+
+                            <div class="border-b border-gray-200">
+                                <div class="flex items-center">
+                                    <input
+                                        type="file"
+                                        accept=".pdf,image/*"
+                                        id="po-file"
+                                        @change="handlePoFileChange"
+                                        class="flex-1 min-w-0 px-3 py-2 text-xs text-gray-500 file:mr-2.5 file:px-2.5 file:py-1.5 file:border file:border-gray-300 file:bg-white file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-50"
+                                    />
+
+                                    <button
+                                        v-if="form.customer_po_file"
+                                        type="button"
+                                        @click="handleViewPoFile"
+                                        class="px-3 py-2.5 border-l border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 whitespace-nowrap"
+                                    >
+                                        Lihat PO
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Payment Terms -->
+                        <div
+                            class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                        >
+                            Syarat Pembayaran
+                        </div>
+
+                        <div class="border-b border-gray-200">
+                            <textarea
+                                v-model="form.terms"
+                                id="payment-terms"
+                                rows="2"
+                                placeholder="Masukkan syarat pembayaran..."
+                                class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 placeholder:text-gray-400 resize-none"
+                            ></textarea>
+                        </div>
+
+                        <!-- Notes -->
+                        <div
+                            class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                        >
+                            Catatan
+                        </div>
+
+                        <div class="border-b border-gray-200">
+                            <textarea
+                                v-model="form.notes"
+                                id="notes"
+                                rows="2"
+                                placeholder="Catatan internal..."
+                                class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 placeholder:text-gray-400 resize-none"
+                            ></textarea>
+                        </div>
+                    </div>
+                </section>
+                <!-- Delivery Address -->
+                <section
+                    v-if="form.document_type === 'Delivery Address'"
+                    class="bg-white border border-gray-200 rounded-lg"
+                >
+                    <div class="px-4 py-2.5 border-b border-gray-200">
+                        <h2 class="text-[13px] font-semibold text-gray-900">
+                            Alamat Pengiriman
+                        </h2>
+                    </div>
+
+                    <div
+                        class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-5"
+                    >
+                        <!-- Sender -->
+                        <div>
+                            <h3
+                                class="text-[11px] font-semibold text-gray-500 mb-2.5"
+                            >
+                                Pengirim
+                            </h3>
+
+                            <div class="space-y-3">
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1.5"
+                                    >
+                                        Nama Perusahaan
+                                    </label>
+
+                                    <input
+                                        v-model="form.sender_name"
+                                        placeholder="Nama perusahaan pengirim"
+                                        class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1.5"
+                                    >
+                                        No. HP
+                                    </label>
+
+                                    <input
+                                        v-model="form.sender_phone"
+                                        placeholder="No. telepon perusahaan"
+                                        class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1.5"
+                                    >
+                                        Alamat
+                                    </label>
+
+                                    <textarea
+                                        v-model="form.sender_address"
+                                        rows="3"
+                                        placeholder="Alamat lengkap pengirim"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    ></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recipient -->
+                        <div>
+                            <h3
+                                class="text-[11px] font-semibold text-gray-500 mb-2.5"
+                            >
+                                Penerima
+                            </h3>
+
+                            <div class="space-y-3">
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1.5"
+                                    >
+                                        Nama / Perusahaan
+                                    </label>
+
+                                    <input
+                                        v-model="form.recipient_name"
+                                        placeholder="Nama penerima atau perusahaan"
+                                        class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1.5"
+                                    >
+                                        No. HP
+                                    </label>
+
+                                    <input
+                                        v-model="form.recipient_phone"
+                                        placeholder="No. telepon penerima"
+                                        class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1.5"
+                                    >
+                                        Alamat
+                                    </label>
+
+                                    <textarea
+                                        v-model="form.recipient_address"
+                                        rows="3"
+                                        placeholder="Alamat lengkap penerima"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    ></textarea>
+                                </div>
+
+                                <div>
+                                    <label
+                                        class="block text-xs font-medium text-gray-600 mb-1.5"
+                                    >
+                                        PIC
+                                    </label>
+
+                                    <input
+                                        v-model="form.recipient_pic"
+                                        placeholder="Nama contact person"
+                                        class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Company Bank Account -->
+                <section
+                    v-if="
+                        (form.document_type === 'Invoice' ||
+                            form.document_type === 'Proforma Invoice') &&
+                        form.company_id &&
+                        companyBankAccounts.length > 0
+                    "
+                    class="bg-white border border-gray-200 rounded-lg"
+                >
+                    <div class="px-4 py-2.5 border-b border-gray-200">
+                        <h2 class="text-[13px] font-semibold text-gray-900">
+                            Rekening Bank
+                        </h2>
+                    </div>
+
+                    <div class="p-4">
+                        <div
+                            class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5"
+                        >
+                            <label
+                                v-for="acc in companyBankAccounts"
+                                :key="acc.id"
+                                class="relative block p-3 border rounded-md cursor-pointer transition-colors"
+                                :class="
+                                    form.bank_account_id === acc.id
+                                        ? 'border-blue-500 bg-blue-50/30'
+                                        : 'border-gray-200 hover:border-gray-300'
+                                "
+                            >
+                                <div class="flex items-start gap-2.5">
+                                    <input
+                                        type="radio"
+                                        :value="acc.id"
+                                        v-model="form.bank_account_id"
+                                        class="mt-0.5 text-blue-600 focus:ring-blue-500"
+                                    />
+
+                                    <div class="min-w-0">
+                                        <div
+                                            class="flex items-center gap-1.5 flex-wrap"
+                                        >
+                                            <span
+                                                class="text-sm font-semibold text-gray-800"
+                                            >
+                                                {{ acc.bank_name }}
+                                            </span>
+
+                                            <span
+                                                v-if="acc.is_default"
+                                                class="text-[10px] font-medium text-blue-700"
+                                            >
+                                                Utama
+                                            </span>
+                                        </div>
+
+                                        <p class="text-xs text-gray-600 mt-0.5">
+                                            {{ acc.account_name }}
+                                        </p>
+
+                                        <p
+                                            class="text-xs font-medium text-gray-800"
+                                        >
+                                            {{ acc.account_number }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Vendor Bank -->
+                <section
+                    v-if="form.document_type === 'Purchase Order'"
+                    class="bg-white border border-gray-200 rounded-lg"
+                >
+                    <div class="px-4 py-2.5 border-b border-gray-200">
+                        <h2 class="text-[13px] font-semibold text-gray-900">
+                            Detail Bank Vendor
+                        </h2>
+                    </div>
+
+                    <div class="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label
+                                class="block text-xs font-medium text-gray-600 mb-1.5"
+                            >
+                                Nama Bank
+                            </label>
+
+                            <input
+                                v-model="form.vendor_bank_name"
+                                placeholder="Contoh: Bank Mandiri"
+                                class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            />
+                        </div>
+
+                        <div>
+                            <label
+                                class="block text-xs font-medium text-gray-600 mb-1.5"
+                            >
+                                Nama Rekening
+                            </label>
+
+                            <input
+                                v-model="form.vendor_bank_account_name"
+                                placeholder="Contoh: PT Sumber Jaya"
+                                class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            />
+                        </div>
+
+                        <div>
+                            <label
+                                class="block text-xs font-medium text-gray-600 mb-1.5"
+                            >
+                                Nomor Rekening
+                            </label>
+
+                            <input
+                                v-model="form.vendor_bank_account_number"
+                                placeholder="Contoh: 12345678"
+                                class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Quotation Terms -->
+                <section
+                    v-if="form.document_type === 'Quotation'"
+                    class="bg-white border border-gray-200 rounded-lg"
+                >
+                    <div class="px-4 py-2.5 border-b border-gray-200">
+                        <h2 class="text-[13px] font-semibold text-gray-900">
+                            Ketentuan Penawaran
+                        </h2>
+                    </div>
+
+                    <div class="w-full text-sm">
+                        <div
+                            class="grid grid-cols-[180px_1fr] border-t border-gray-200"
+                        >
+                            <!-- Stock Conditions -->
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Stock Conditions
+                            </div>
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.stock_conditions"
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 focus:bg-blue-50/30"
+                                />
+                            </div>
+
+                            <!-- Term of Payment -->
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Term of Payment
+                            </div>
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.term_of_payment"
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 focus:bg-blue-50/30"
+                                />
+                            </div>
+
+                            <!-- Price Conditions -->
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Price Conditions
+                            </div>
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.price_conditions"
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 focus:bg-blue-50/30"
+                                />
+                            </div>
+
+                            <!-- Standard Packing -->
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Standard Packing
+                            </div>
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.standard_packing"
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 focus:bg-blue-50/30"
+                                />
+                            </div>
+
+                            <!-- Offer Validity -->
+                            <div
+                                class="px-3 py-2.5 bg-gray-50 border-b border-r border-gray-200 font-medium text-gray-600"
+                            >
+                                Offer Validity
+                            </div>
+                            <div class="border-b border-gray-200">
+                                <input
+                                    v-model="form.offer_validity"
+                                    class="w-full px-3 py-2.5 bg-transparent border-0 outline-none text-gray-800 focus:bg-blue-50/30"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Items -->
+                <!-- Items -->
+                <section
+                    v-if="form.document_type !== 'Delivery Address'"
+                    class="bg-white border border-gray-300"
+                >
+                    <!-- Header -->
+                    <div
+                        class="flex items-center justify-between px-3 py-1.5 border-b border-gray-300"
+                    >
+                        <h2 class="text-xs font-semibold text-gray-900">
+                            Item Barang
+                        </h2>
+
+                        <span class="text-[11px] text-gray-500">
+                            {{ form.items.length }} item
+                        </span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse table-fixed">
+                            <thead>
+                                <tr
+                                    class="bg-gray-100 border-b border-gray-300"
+                                >
+                                    <th
+                                        class="h-7 px-2 text-left text-[10px] font-semibold text-gray-600 min-w-[170px]"
+                                    >
+                                        Nama Barang
+                                    </th>
+
+                                    <th
+                                        class="h-7 px-2 text-left text-[10px] font-semibold text-gray-600 min-w-[160px]"
+                                    >
+                                        Deskripsi
+                                    </th>
+
+                                    <th
+                                        class="h-7 px-1.5 text-right text-[10px] font-semibold text-gray-600 w-20"
+                                    >
+                                        Qty
+                                    </th>
+
+                                    <th
+                                        class="h-7 px-1.5 text-left text-[10px] font-semibold text-gray-600 w-24"
+                                    >
+                                        Satuan
+                                    </th>
+
+                                    <th
+                                        v-if="
+                                            form.document_type !==
+                                            'Delivery Slip'
+                                        "
+                                        class="h-7 px-1.5 text-right text-[10px] font-semibold text-gray-600 w-32"
+                                    >
+                                        Harga
+                                    </th>
+
+                                    <th
+                                        v-if="
+                                            form.document_type !==
+                                            'Delivery Slip'
+                                        "
+                                        class="h-7 px-1.5 text-right text-[10px] font-semibold text-gray-600 w-32"
+                                    >
+                                        Total
+                                    </th>
+
+                                    <th class="w-12"></th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                <template
+                                    v-for="(item, i) in form.items"
+                                    :key="i"
+                                >
+                                    <!-- Item Row -->
+                                    <tr
+                                        class="border-b border-gray-200 hover:bg-gray-50"
+                                    >
+                                        <!-- Product -->
+                                        <td
+                                            class="px-2 py-1 border-r border-gray-100 align-top"
+                                        >
+                                            <textarea
+                                                :ref="
+                                                    (el) => {
+                                                        if (el) {
+                                                            el.style.height =
+                                                                'auto';
+                                                            el.style.height =
+                                                                el.scrollHeight +
+                                                                'px';
+                                                        }
+                                                    }
+                                                "
+                                                @input="
+                                                    onProductNameInput(item);
+                                                    $event.target.style.height =
+                                                        'auto';
+                                                    $event.target.style.height =
+                                                        $event.target
+                                                            .scrollHeight +
+                                                        'px';
+                                                "
+                                                v-model="item.product_name"
+                                                placeholder="Nama barang"
+                                                rows="1"
+                                                class="w-full p-0 border-0 outline-none bg-transparent text-xs text-gray-800 placeholder:text-gray-400 focus:ring-0 resize-none overflow-hidden leading-relaxed"
+                                            ></textarea>
+                                        </td>
+
+                                        <!-- Description -->
+                                        <td
+                                            class="px-2 py-1 border-r border-gray-100 align-top"
+                                        >
+                                            <textarea
+                                                :ref="
+                                                    (el) => {
+                                                        if (el) {
+                                                            el.style.height =
+                                                                'auto';
+                                                            el.style.height =
+                                                                el.scrollHeight +
+                                                                'px';
+                                                        }
+                                                    }
+                                                "
+                                                @input="
+                                                    $event.target.style.height =
+                                                        'auto';
+                                                    $event.target.style.height =
+                                                        $event.target
+                                                            .scrollHeight +
+                                                        'px';
+                                                "
+                                                v-model="item.description"
+                                                placeholder="Deskripsi"
+                                                rows="1"
+                                                class="w-full p-0 border-0 outline-none bg-transparent text-xs text-gray-700 placeholder:text-gray-400 focus:ring-0 resize-none overflow-hidden leading-relaxed"
+                                            ></textarea>
+                                        </td>
+
+                                        <!-- Qty -->
+                                        <td
+                                            class="px-1.5 py-1 border-r border-gray-100 align-top"
+                                        >
+                                            <div
+                                                class="h-full flex items-center"
+                                            >
+                                                <input
+                                                    :value="item.qty"
+                                                    @input="
+                                                        onQtyInput(item, $event)
+                                                    "
+                                                    :disabled="
+                                                        item.has_variations
+                                                    "
+                                                    inputmode="numeric"
+                                                    placeholder="0"
+                                                    :class="
+                                                        item.has_variations
+                                                            ? 'text-gray-400 cursor-not-allowed'
+                                                            : 'text-gray-800'
+                                                    "
+                                                    class="w-full p-0 border-0 outline-none bg-transparent text-xs text-right placeholder:text-gray-400 focus:ring-0"
+                                                />
+                                            </div>
+                                        </td>
+
+                                        <!-- UOM -->
+                                        <td
+                                            class="px-1.5 py-1 border-r border-gray-100 align-top"
+                                        >
+                                            <div
+                                                class="h-full flex items-center"
+                                            >
+                                                <select
+                                                    v-model="item.uom"
+                                                    class="w-full p-0 pr-2 border-0 outline-none bg-transparent text-xs text-gray-700 focus:ring-0 cursor-pointer"
+                                                >
+                                                    <option value="PCS">
+                                                        PCS
+                                                    </option>
+                                                    <option value="KG">
+                                                        KG
+                                                    </option>
+                                                    <option value="MTR">
+                                                        MTR
+                                                    </option>
+                                                    <option value="LTR">
+                                                        LTR
+                                                    </option>
+                                                    <option value="BOX">
+                                                        BOX
+                                                    </option>
+                                                    <option value="ROL">
+                                                        ROL
+                                                    </option>
+                                                    <option value="SET">
+                                                        SET
+                                                    </option>
+                                                    <option value="UNIT">
+                                                        UNIT
+                                                    </option>
+                                                </select>
+                                            </div>
+                                        </td>
+
+                                        <!-- Price -->
+                                        <td
+                                            v-if="
+                                                form.document_type !==
+                                                'Delivery Slip'
+                                            "
+                                            class="px-1.5 py-1 border-r border-gray-100 align-top"
+                                        >
+                                            <div
+                                                class="h-full flex items-center"
+                                            >
+                                                <input
+                                                    :value="
+                                                        formatRupiah(
+                                                            item.unit_price,
+                                                        )
+                                                    "
+                                                    @input="
+                                                        onPriceInput(
+                                                            item,
+                                                            $event,
+                                                        )
+                                                    "
+                                                    :disabled="
+                                                        item.has_variations
+                                                    "
+                                                    inputmode="numeric"
+                                                    placeholder="0"
+                                                    :class="
+                                                        item.has_variations
+                                                            ? 'text-gray-400 cursor-not-allowed'
+                                                            : 'text-gray-800'
+                                                    "
+                                                    class="w-full p-0 border-0 outline-none bg-transparent text-xs text-right placeholder:text-gray-400 focus:ring-0"
+                                                />
+                                            </div>
+                                        </td>
+
+                                        <!-- Total -->
+                                        <td
+                                            v-if="
+                                                form.document_type !==
+                                                'Delivery Slip'
+                                            "
+                                            class="px-1.5 py-1 text-right border-r border-gray-100 align-top"
+                                        >
+                                            <div
+                                                class="h-full flex items-center justify-end"
+                                            >
+                                                <span
+                                                    class="text-xs text-gray-800"
+                                                >
+                                                    {{
+                                                        new Intl.NumberFormat(
+                                                            "id-ID",
+                                                        ).format(
+                                                            item.total || 0,
+                                                        )
+                                                    }}
+                                                </span>
+                                            </div>
+                                        </td>
+
+                                        <!-- Actions -->
+                                        <td class="px-1 py-1 align-top">
+                                            <div
+                                                class="h-full flex items-center justify-end gap-0.5"
+                                            >
+                                                <!-- Variations -->
+                                                <button
+                                                    v-if="
+                                                        form.document_type !==
+                                                        'Delivery Slip'
+                                                    "
+                                                    @click="
+                                                        toggleVariations(item)
+                                                    "
+                                                    type="button"
+                                                    :class="
+                                                        item.has_variations
+                                                            ? 'text-blue-600'
+                                                            : 'text-gray-400 hover:text-gray-700'
+                                                    "
+                                                    class="p-1 border-0 bg-transparent inline-flex items-center justify-center"
+                                                    title="Kelola variasi"
+                                                >
+                                                    <svg
+                                                        class="w-3.5 h-3.5"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="1.8"
+                                                            d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                                                        ></path>
+                                                    </svg>
+                                                </button>
+
+                                                <!-- Remove -->
+                                                <button
+                                                    @click="removeItem(i)"
+                                                    type="button"
+                                                    class="p-1 border-0 bg-transparent text-gray-400 hover:text-red-600 inline-flex items-center justify-center"
+                                                    title="Hapus barang"
+                                                >
+                                                    <svg
+                                                        class="w-3.5 h-3.5"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            stroke-width="1.8"
+                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 01-1-1h-4a1 1 0 01-1 1v3M4 7h16"
+                                                        ></path>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+
+                                    <!-- Variations -->
+                                    <tr v-if="item.has_variations">
+                                        <td
+                                            :colspan="
+                                                form.document_type ===
+                                                'Delivery Slip'
+                                                    ? 5
+                                                    : 7
+                                            "
+                                            class="px-2 py-1.5 border-b border-gray-200 bg-gray-50"
+                                        >
+                                            <div
+                                                class="ml-2 pl-2 border-l border-gray-300"
+                                            >
+                                                <div
+                                                    class="flex items-center justify-between h-6"
+                                                >
+                                                    <span
+                                                        class="text-[10px] font-semibold text-gray-500"
+                                                    >
+                                                        Variasi Barang
+                                                    </span>
+
+                                                    <button
+                                                        @click="
+                                                            addVariation(item)
+                                                        "
+                                                        type="button"
+                                                        class="text-[10px] text-blue-600 hover:text-blue-700"
+                                                    >
+                                                        + Tambah variasi
+                                                    </button>
+                                                </div>
+
+                                                <table
+                                                    class="w-full border-collapse"
+                                                >
+                                                    <thead>
+                                                        <tr
+                                                            class="border-b border-gray-200"
+                                                        >
+                                                            <th
+                                                                class="h-6 pr-2 text-left text-[9px] font-medium text-gray-400"
+                                                            >
+                                                                Nama / Jenis
+                                                            </th>
+
+                                                            <th
+                                                                class="h-6 px-1.5 text-right text-[9px] font-medium text-gray-400 w-20"
+                                                            >
+                                                                Qty
+                                                            </th>
+
+                                                            <th
+                                                                class="h-6 px-1.5 text-right text-[9px] font-medium text-gray-400 w-32"
+                                                            >
+                                                                Harga Satuan
+                                                            </th>
+
+                                                            <th
+                                                                class="w-7"
+                                                            ></th>
+                                                        </tr>
+                                                    </thead>
+
+                                                    <tbody>
+                                                        <tr
+                                                            v-for="(
+                                                                v, vi
+                                                            ) in item.variations"
+                                                            :key="vi"
+                                                            class="border-b border-gray-100 last:border-0"
+                                                        >
+                                                            <td
+                                                                class="h-7 pr-2"
+                                                            >
+                                                                <input
+                                                                    v-model="
+                                                                        v.name
+                                                                    "
+                                                                    type="text"
+                                                                    placeholder="Nama variasi"
+                                                                    class="w-full h-6 p-0 border-0 outline-none bg-transparent text-[11px] text-gray-700 placeholder:text-gray-400 focus:ring-0"
+                                                                />
+                                                            </td>
+
+                                                            <td
+                                                                class="h-7 px-1.5"
+                                                            >
+                                                                <input
+                                                                    :value="
+                                                                        v.qty
+                                                                    "
+                                                                    @input="
+                                                                        onVariationQtyInput(
+                                                                            item,
+                                                                            v,
+                                                                            $event,
+                                                                        )
+                                                                    "
+                                                                    type="number"
+                                                                    placeholder="0"
+                                                                    class="w-full h-6 p-0 border-0 outline-none bg-transparent text-[11px] text-right text-gray-700 placeholder:text-gray-400 focus:ring-0"
+                                                                />
+                                                            </td>
+
+                                                            <td
+                                                                class="h-7 px-1.5"
+                                                            >
+                                                                <input
+                                                                    :value="
+                                                                        formatRupiah(
+                                                                            v.unit_price,
+                                                                        )
+                                                                    "
+                                                                    @input="
+                                                                        onVariationPriceInput(
+                                                                            item,
+                                                                            v,
+                                                                            $event,
+                                                                        )
+                                                                    "
+                                                                    type="text"
+                                                                    placeholder="0"
+                                                                    class="w-full h-6 p-0 border-0 outline-none bg-transparent text-[11px] text-right text-gray-700 placeholder:text-gray-400 focus:ring-0"
+                                                                />
+                                                            </td>
+
+                                                            <td
+                                                                class="h-7 text-right"
+                                                            >
+                                                                <button
+                                                                    @click="
+                                                                        removeVariation(
+                                                                            item,
+                                                                            vi,
+                                                                        )
+                                                                    "
+                                                                    type="button"
+                                                                    class="p-0.5 border-0 bg-transparent text-gray-400 hover:text-red-600"
+                                                                    title="Hapus variasi"
+                                                                >
+                                                                    <svg
+                                                                        class="w-3 h-3"
+                                                                        fill="none"
+                                                                        stroke="currentColor"
+                                                                        viewBox="0 0 24 24"
+                                                                    >
+                                                                        <path
+                                                                            stroke-linecap="round"
+                                                                            stroke-linejoin="round"
+                                                                            stroke-width="1.8"
+                                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 01-1-1h-4a1 1 0 01-1 1v3M4 7h16"
+                                                                        ></path>
+                                                                    </svg>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+
+                                <!-- Empty -->
+                                <tr v-if="form.items.length === 0">
+                                    <td
+                                        :colspan="
+                                            form.document_type ===
+                                            'Delivery Slip'
+                                                ? 5
+                                                : 7
+                                        "
+                                        class="py-4 text-center border-b border-gray-200"
+                                    >
+                                        <span class="text-xs text-gray-400">
+                                            Belum ada item.
+                                        </span>
+                                    </td>
+                                </tr>
+
+                                <!-- Add Item -->
+                                <tr>
+                                    <td
+                                        :colspan="
+                                            form.document_type ===
+                                            'Delivery Slip'
+                                                ? 5
+                                                : 7
+                                        "
+                                        class="h-8 px-2"
+                                    >
+                                        <button
+                                            type="button"
+                                            @click="addItem"
+                                            class="p-0 border-0 bg-transparent text-xs text-blue-600 hover:text-blue-700"
+                                        >
+                                            + Tambah Item
                                         </button>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </section>
 
-                <!-- Totals -->
-                <div
+                <!-- Summary -->
+                <!-- Summary -->
+                <section
                     v-if="
                         form.document_type !== 'Delivery Address' &&
                         form.document_type !== 'Delivery Slip'
                     "
-                    class="flex justify-end"
+                    class="bg-white border border-gray-300"
                 >
-                    <div class="w-72 space-y-2">
-                        <div class="flex justify-between text-sm">
-                            <span class="text-gray-500">Subtotal</span>
-                            <span class="font-medium">{{
-                                new Intl.NumberFormat("id-ID").format(subtotal)
-                            }}</span>
-                        </div>
-                        <div class="flex justify-between text-sm items-center">
-                            <label
-                                class="inline-flex items-center text-gray-500 cursor-pointer select-none"
-                            >
-                                <input
-                                    type="checkbox"
-                                    v-model="form.is_ppn"
-                                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"
-                                />
-                                Gunakan PPN (11%)
-                            </label>
-                            <span class="font-medium text-green-600"
-                                >+{{
-                                    new Intl.NumberFormat("id-ID").format(tax)
-                                }}</span
-                            >
-                        </div>
-                        <div
-                            class="flex flex-col gap-1.5 border-t border-gray-100 pt-2 pb-1"
-                        >
-                            <div
-                                class="flex justify-between items-center text-sm"
-                            >
+                    <div class="px-3 py-1.5 border-b border-gray-300">
+                        <h2 class="text-xs font-semibold text-gray-900">
+                            Ringkasan
+                        </h2>
+                    </div>
+
+                    <div class="px-3 py-2">
+                        <div class="ml-auto w-full max-w-sm text-xs">
+                            <!-- Subtotal -->
+                            <div class="flex items-center justify-between py-1">
+                                <span class="text-xs text-gray-600">
+                                    Subtotal
+                                </span>
+
+                                <span class="text-xs font-medium text-gray-800">
+                                    {{
+                                        new Intl.NumberFormat("id-ID").format(
+                                            subtotal,
+                                        )
+                                    }}
+                                </span>
+                            </div>
+
+                            <!-- PPN -->
+                            <div class="flex items-center justify-between py-1">
                                 <label
-                                    class="inline-flex items-center text-gray-500 cursor-pointer select-none"
+                                    class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none"
                                 >
                                     <input
                                         type="checkbox"
-                                        :checked="form.payment_type === 'dp'"
-                                        @change="togglePaymentType('dp')"
-                                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"
+                                        v-model="form.is_ppn"
+                                        class="w-3 h-3 rounded-sm border-gray-300 text-blue-600 focus:ring-0"
                                     />
-                                    Uang Muka (DP)
+
+                                    <span>PPN (11%)</span>
                                 </label>
+
+                                <span class="text-xs font-medium text-gray-700">
+                                    {{
+                                        new Intl.NumberFormat("id-ID").format(
+                                            tax,
+                                        )
+                                    }}
+                                </span>
                             </div>
+
+                            <!-- Payment -->
+                            <div class="border-t border-gray-200 mt-1 pt-1.5">
+                                <div
+                                    class="text-[11px] font-medium text-gray-500 mb-1"
+                                >
+                                    Pembayaran
+                                </div>
+
+                                <div class="flex items-center gap-4">
+                                    <label
+                                        class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            :checked="
+                                                form.payment_type === 'dp'
+                                            "
+                                            @change="togglePaymentType('dp')"
+                                            class="w-3 h-3 rounded-sm border-gray-300 text-blue-600 focus:ring-0"
+                                        />
+
+                                        <span>Uang Muka (DP)</span>
+                                    </label>
+
+                                    <label
+                                        class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            :checked="
+                                                form.payment_type ===
+                                                'pelunasan'
+                                            "
+                                            @change="
+                                                togglePaymentType('pelunasan')
+                                            "
+                                            class="w-3 h-3 rounded-sm border-gray-300 text-blue-600 focus:ring-0"
+                                        />
+
+                                        <span>Pelunasan</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- DP Detail -->
                             <div
-                                class="flex justify-between items-center text-sm"
+                                v-if="form.payment_type !== 'full'"
+                                class="border-t border-gray-100 mt-1 pt-1.5"
                             >
-                                <label
-                                    class="inline-flex items-center text-gray-500 cursor-pointer select-none"
+                                <div
+                                    class="flex items-center justify-between py-0.5"
                                 >
-                                    <input
-                                        type="checkbox"
-                                        :checked="
-                                            form.payment_type === 'pelunasan'
-                                        "
-                                        @change="togglePaymentType('pelunasan')"
-                                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"
-                                    />
-                                    Pelunasan
-                                </label>
+                                    <span class="text-xs text-gray-500">
+                                        Persentase DP
+                                    </span>
+
+                                    <div class="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="100"
+                                            v-model.number="form.dp_percent"
+                                            class="w-14 h-6 px-1.5 border-0 border-b border-gray-300 rounded-none bg-transparent text-xs text-right outline-none focus:border-blue-500 focus:ring-0"
+                                        />
+
+                                        <span class="text-[11px] text-gray-400">
+                                            %
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div
+                                    class="flex items-center justify-between py-0.5"
+                                >
+                                    <span class="text-xs text-gray-500">
+                                        Nominal DP ({{ form.dp_percent }}%)
+                                    </span>
+
+                                    <span
+                                        class="text-xs font-medium text-gray-800"
+                                    >
+                                        {{
+                                            new Intl.NumberFormat(
+                                                "id-ID",
+                                            ).format(dpAmount)
+                                        }}
+                                    </span>
+                                </div>
+
+                                <div
+                                    class="flex items-center justify-between py-0.5"
+                                >
+                                    <span class="text-xs text-gray-500">
+                                        Pelunasan ({{ 100 - form.dp_percent }}%)
+                                    </span>
+
+                                    <span
+                                        class="text-xs font-medium text-gray-800"
+                                    >
+                                        {{
+                                            new Intl.NumberFormat(
+                                                "id-ID",
+                                            ).format(pelunasanAmount)
+                                        }}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
-                        <div
-                            v-if="form.payment_type !== 'full'"
-                            class="space-y-2 border-t border-gray-100 pt-2 pb-1"
-                        >
+
+                            <!-- Grand Total -->
                             <div
-                                class="flex justify-between text-sm items-center"
+                                class="border-t border-gray-300 mt-1.5 pt-1.5 flex items-center justify-between"
                             >
-                                <span class="text-xs text-gray-400"
-                                    >Persentase DP (%)</span
+                                <span
+                                    class="text-sm font-semibold text-gray-900"
                                 >
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="100"
-                                    v-model.number="form.dp_percent"
-                                    class="w-16 px-1.5 py-0.5 border border-gray-300 rounded text-xs text-right focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                            </div>
-                            <div class="flex justify-between text-sm">
-                                <span class="text-gray-500"
-                                    >Nominal DP ({{ form.dp_percent }}%)</span
+                                    Grand Total
+                                </span>
+
+                                <span
+                                    class="text-[15px] font-semibold"
+                                    :class="
+                                        form.payment_type !== 'full'
+                                            ? 'text-blue-600'
+                                            : 'text-gray-900'
+                                    "
                                 >
-                                <span class="font-medium text-blue-600">{{
-                                    new Intl.NumberFormat("id-ID").format(
-                                        dpAmount,
-                                    )
-                                }}</span>
+                                    {{
+                                        new Intl.NumberFormat("id-ID").format(
+                                            grandTotal,
+                                        )
+                                    }}
+                                </span>
                             </div>
-                            <div class="flex justify-between text-sm">
-                                <span class="text-gray-500"
-                                    >Nominal Pelunasan ({{
-                                        100 - form.dp_percent
-                                    }}%)</span
-                                >
-                                <span class="font-medium text-gray-700">{{
-                                    new Intl.NumberFormat("id-ID").format(
-                                        pelunasanAmount,
-                                    )
-                                }}</span>
-                            </div>
-                        </div>
-                        <div
-                            class="flex justify-between text-sm font-bold border-t border-gray-200 pt-2"
-                        >
-                            <span>Grand Total</span>
-                            <span
-                                :class="
-                                    form.payment_type !== 'full'
-                                        ? 'text-blue-600 font-bold'
-                                        : ''
+
+                            <!-- Terbilang -->
+                            <div
+                                v-if="
+                                    (form.document_type === 'Invoice' ||
+                                        form.document_type ===
+                                            'Proforma Invoice') &&
+                                    grandTotal > 0
                                 "
-                                >{{
-                                    new Intl.NumberFormat("id-ID").format(
-                                        grandTotal,
-                                    )
-                                }}</span
+                                class="text-right mt-1"
                             >
-                        </div>
-                        <!-- Terbilang Display -->
-                        <div
-                            v-if="
-                                (form.document_type === 'Invoice' ||
-                                    form.document_type ===
-                                        'Proforma Invoice') &&
-                                grandTotal > 0
-                            "
-                            class="text-xs text-right text-gray-500 italic mt-1.5 font-medium bg-gray-50 p-2 rounded border border-gray-100"
-                        >
-                            Terbilang: {{ spellNumber(grandTotal) }}
+                                <span class="text-[10px] text-gray-400">
+                                    Terbilang:
+                                </span>
+
+                                <span class="text-[10px] text-gray-500 italic">
+                                    {{ spellNumber(grandTotal) }}
+                                </span>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
 
             <!-- Actions -->
-            <div class="flex items-center justify-end gap-3 mt-6">
-                <button
-                    v-if="isEdit"
-                    @click="handleDelete"
-                    :disabled="saving"
-                    class="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                    <svg
-                        class="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                    >
-                        <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        ></path>
-                    </svg>
-                    Hapus
-                </button>
-                <button
-                    @click="
-                        router.push({
-                            path: '/documents',
-                            query: { type: form.document_type },
-                        })
-                    "
-                    class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg transition-colors"
-                >
-                    Batal
-                </button>
-                <button
-                    @click="handleSave(false)"
-                    :disabled="saving"
-                    class="px-4 py-2 bg-indofilter hover:bg-indofilter-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                    <svg
-                        v-if="saving"
-                        class="animate-spin h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                    >
-                        <circle
-                            class="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            stroke-width="4"
-                        ></circle>
-                        <path
-                            class="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                    </svg>
-                    {{ saving ? "Menyimpan..." : "Simpan sebagai Draft" }}
-                </button>
-                <button
-                    @click="handleSave(true)"
-                    :disabled="saving"
-                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-                >
-                    Simpan & Konfirmasi
-                </button>
-            </div>
-        </template>
-
-        <datalist id="company-products">
-            <option
-                v-for="prod in companyProducts"
-                :key="prod.id"
-                :value="prod.name"
-            >
-                {{ prod.code ? `[${prod.code}] ` : ""
-                }}{{ prod.description ? ` - ${prod.description}` : "" }}
-            </option>
-        </datalist>
-
-        <!-- Add Partner Modal -->
-        <div
-            v-if="isOpenPartnerModal"
-            class="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-        >
             <div
-                class="bg-white rounded-2xl max-w-lg w-full border border-gray-150 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
+                class="sticky bottom-0 z-30 mt-5 -mx-4 px-4 py-3 bg-white/95 backdrop-blur-sm border-t border-gray-200 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5"
             >
-                <!-- Modal Header -->
-                <div
-                    class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
-                >
-                    <h3 class="text-base font-bold text-gray-800">
-                        Tambah Partner Baru
-                    </h3>
+                <div>
                     <button
-                        type="button"
-                        @click="isOpenPartnerModal = false"
-                        class="text-gray-400 hover:text-gray-650 transition-colors"
+                        v-if="isEdit"
+                        @click="handleDelete"
+                        :disabled="saving"
+                        class="px-3 h-9 text-sm font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
                     >
-                        <svg
-                            class="w-5 h-5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12"
-                            ></path>
-                        </svg>
+                        Hapus Dokumen
                     </button>
                 </div>
 
-                <!-- Modal Body -->
-                <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-                    <!-- Type Selector -->
-                    <div>
-                        <label
-                            class="block text-xs font-semibold text-gray-650 mb-1"
-                            >Tipe Partner</label
-                        >
-                        <select
-                            v-model="partnerForm.type"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                        >
-                            <option value="customer">Customer</option>
-                            <option value="vendor">Vendor</option>
-                        </select>
-                    </div>
-
-                    <!-- Name -->
-                    <div>
-                        <label
-                            class="block text-xs font-semibold text-gray-650 mb-1"
-                            >Nama Partner / Perusahaan *</label
-                        >
-                        <input
-                            v-model="partnerForm.name"
-                            type="text"
-                            placeholder="Nama Lengkap / Nama PT"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            required
-                        />
-                    </div>
-
-                    <!-- Alias -->
-                    <div>
-                        <label
-                            class="block text-xs font-semibold text-gray-650 mb-1"
-                            >Alias (Singkatan)</label
-                        >
-                        <input
-                            v-model="partnerForm.alias"
-                            type="text"
-                            placeholder="Contoh: Maju Jaya"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                    </div>
-
-                    <!-- Address -->
-                    <div>
-                        <label
-                            class="block text-xs font-semibold text-gray-650 mb-1"
-                            >Alamat Lengkap</label
-                        >
-                        <textarea
-                            v-model="partnerForm.address"
-                            rows="3"
-                            placeholder="Alamat pengiriman / penagihan"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                        ></textarea>
-                    </div>
-
-                    <!-- Phone and Contact Person (Parallel) -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label
-                                class="block text-xs font-semibold text-gray-650 mb-1"
-                                >No. HP / Telepon</label
-                            >
-                            <input
-                                v-model="partnerForm.phone"
-                                type="text"
-                                placeholder="No. Telepon"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
-                        </div>
-                        <div>
-                            <label
-                                class="block text-xs font-semibold text-gray-650 mb-1"
-                                >Kontak Person (PIC)</label
-                            >
-                            <input
-                                v-model="partnerForm.contact_person"
-                                type="text"
-                                placeholder="Nama PIC"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
-                        </div>
-                    </div>
-
-                    <!-- Email and NPWP (Parallel - Rarely used) -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label
-                                class="block text-xs font-semibold text-gray-650 mb-1"
-                                >Email</label
-                            >
-                            <input
-                                v-model="partnerForm.email"
-                                type="email"
-                                placeholder="Alamat Email"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
-                        </div>
-                        <div>
-                            <label
-                                class="block text-xs font-semibold text-gray-650 mb-1"
-                                >NPWP</label
-                            >
-                            <input
-                                v-model="partnerForm.npwp"
-                                type="text"
-                                placeholder="Nomor NPWP"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Modal Footer -->
-                <div
-                    class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 bg-gray-50/50"
-                >
+                <div class="flex items-center justify-end gap-2">
                     <button
-                        type="button"
-                        @click="isOpenPartnerModal = false"
-                        class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        @click="
+                            router.push({
+                                path: '/documents',
+                                query: { type: form.document_type },
+                            })
+                        "
+                        class="px-3.5 h-9 text-sm font-medium text-gray-600 border border-gray-300 rounded-md bg-white hover:bg-gray-50 transition-colors"
                     >
                         Batal
                     </button>
+
                     <button
-                        type="button"
-                        @click="handleSavePartner"
-                        :disabled="isSavingPartner"
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                        @click="handleSave(false)"
+                        :disabled="saving"
+                        class="px-3.5 h-9 text-sm font-medium text-gray-700 border border-gray-300 rounded-md bg-white hover:bg-gray-50 transition-colors disabled:opacity-50 inline-flex items-center gap-2"
                     >
                         <svg
-                            v-if="isSavingPartner"
-                            class="animate-spin h-4 w-4"
+                            v-if="saving"
+                            class="animate-spin h-3.5 w-3.5"
                             fill="none"
                             viewBox="0 0 24 24"
                         >
@@ -2460,7 +2946,7 @@ onUnmounted(() => {
                                 cy="12"
                                 r="10"
                                 stroke="currentColor"
-                                stroke-width="4"
+                                stroke-width="3"
                             ></circle>
                             <path
                                 class="opacity-75"
@@ -2468,10 +2954,269 @@ onUnmounted(() => {
                                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                             ></path>
                         </svg>
-                        Simpan Partner
+
+                        {{ saving ? "Menyimpan..." : "Simpan Draft" }}
+                    </button>
+
+                    <button
+                        @click="handleSave(true)"
+                        :disabled="saving"
+                        class="px-3.5 h-9 text-sm font-medium text-white bg-indofilter hover:bg-indofilter-dark rounded-md transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+                    >
+                        <svg
+                            class="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="1.8"
+                                d="M5 13l4 4L19 7"
+                            ></path>
+                        </svg>
+
+                        {{ saving ? "Menyimpan..." : "Simpan & Konfirmasi" }}
                     </button>
                 </div>
             </div>
-        </div>
+
+            <!-- Product Datalist -->
+            <datalist id="company-products">
+                <option
+                    v-for="prod in companyProducts"
+                    :key="prod.id"
+                    :value="prod.name"
+                >
+                    {{ prod.code ? `[${prod.code}] ` : ""
+                    }}{{ prod.description ? ` - ${prod.description}` : "" }}
+                </option>
+            </datalist>
+
+            <!-- Add Partner Modal -->
+            <div
+                v-if="isOpenPartnerModal"
+                class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+            >
+                <div
+                    class="bg-white w-full max-w-md rounded-lg border border-gray-200 shadow-xl overflow-hidden"
+                >
+                    <!-- Modal Header -->
+                    <div
+                        class="px-4 py-3 border-b border-gray-200 flex items-center justify-between"
+                    >
+                        <h3 class="text-sm font-semibold text-gray-900">
+                            Tambah Partner
+                        </h3>
+
+                        <button
+                            type="button"
+                            @click="isOpenPartnerModal = false"
+                            class="w-7 h-7 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 inline-flex items-center justify-center"
+                        >
+                            <svg
+                                class="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="1.8"
+                                    d="M6 18L18 6M6 6l12 12"
+                                ></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Modal Body -->
+                    <div class="p-4 space-y-3 max-h-[65vh] overflow-y-auto">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <!-- Type -->
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-gray-600 mb-1.5"
+                                >
+                                    Tipe Partner
+                                </label>
+
+                                <select
+                                    v-model="partnerForm.type"
+                                    class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                >
+                                    <option value="customer">Customer</option>
+                                    <option value="vendor">Vendor</option>
+                                </select>
+                            </div>
+
+                            <!-- Alias -->
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-gray-600 mb-1.5"
+                                >
+                                    Alias
+                                </label>
+
+                                <input
+                                    v-model="partnerForm.alias"
+                                    type="text"
+                                    placeholder="Contoh: Maju Jaya"
+                                    class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Name -->
+                        <div>
+                            <label
+                                class="block text-xs font-medium text-gray-600 mb-1.5"
+                            >
+                                Nama Partner / Perusahaan
+                                <span class="text-red-500">*</span>
+                            </label>
+
+                            <input
+                                v-model="partnerForm.name"
+                                type="text"
+                                placeholder="Nama Lengkap / Nama PT"
+                                required
+                                class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            />
+                        </div>
+
+                        <!-- Address -->
+                        <div>
+                            <label
+                                class="block text-xs font-medium text-gray-600 mb-1.5"
+                            >
+                                Alamat Lengkap
+                            </label>
+
+                            <textarea
+                                v-model="partnerForm.address"
+                                rows="2"
+                                placeholder="Alamat pengiriman / penagihan"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            ></textarea>
+                        </div>
+
+                        <!-- Phone / PIC -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-gray-600 mb-1.5"
+                                >
+                                    No. HP / Telepon
+                                </label>
+
+                                <input
+                                    v-model="partnerForm.phone"
+                                    type="text"
+                                    placeholder="No. Telepon"
+                                    class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-gray-600 mb-1.5"
+                                >
+                                    Kontak Person (PIC)
+                                </label>
+
+                                <input
+                                    v-model="partnerForm.contact_person"
+                                    type="text"
+                                    placeholder="Nama PIC"
+                                    class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+                        </div>
+
+                        <!-- Email / NPWP -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-gray-600 mb-1.5"
+                                >
+                                    Email
+                                </label>
+
+                                <input
+                                    v-model="partnerForm.email"
+                                    type="email"
+                                    placeholder="Alamat Email"
+                                    class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label
+                                    class="block text-xs font-medium text-gray-600 mb-1.5"
+                                >
+                                    NPWP
+                                </label>
+
+                                <input
+                                    v-model="partnerForm.npwp"
+                                    type="text"
+                                    placeholder="Nomor NPWP"
+                                    class="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Modal Footer -->
+                    <div
+                        class="px-4 py-3 border-t border-gray-200 flex items-center justify-end gap-2"
+                    >
+                        <button
+                            type="button"
+                            @click="isOpenPartnerModal = false"
+                            class="px-3.5 h-9 text-sm font-medium text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                        >
+                            Batal
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="handleSavePartner"
+                            :disabled="isSavingPartner"
+                            class="px-3.5 h-9 text-sm font-medium text-white bg-indofilter hover:bg-indofilter-dark rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
+                        >
+                            <svg
+                                v-if="isSavingPartner"
+                                class="animate-spin h-3.5 w-3.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle
+                                    class="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    stroke-width="3"
+                                ></circle>
+                                <path
+                                    class="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                ></path>
+                            </svg>
+
+                            {{
+                                isSavingPartner
+                                    ? "Menyimpan..."
+                                    : "Simpan Partner"
+                            }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
     </div>
 </template>

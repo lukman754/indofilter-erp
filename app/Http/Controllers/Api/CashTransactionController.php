@@ -61,6 +61,7 @@ class CashTransactionController extends Controller
                 'cash_account_id' => $t->cash_account_id,
                 'type'            => $t->type,
                 'amount'          => $t->amount,
+                'formula'         => $t->formula,
                 'description'     => $t->description,
                 'pic'             => $t->pic,
                 'is_marked'       => $t->is_marked,
@@ -94,6 +95,7 @@ class CashTransactionController extends Controller
             'cash_account_id' => 'required|exists:cash_accounts,id',
             'type'            => 'required|in:in,out',
             'amount'          => 'required|numeric|min:0.01',
+            'formula'         => 'nullable|string|max:500',
             'description'     => 'nullable|string',
             'pic'             => 'nullable|string|max:100',
             'is_marked'       => 'nullable|boolean',
@@ -110,6 +112,7 @@ class CashTransactionController extends Controller
             'cash_account_id' => $transaction->cash_account_id,
             'type'            => $transaction->type,
             'amount'          => $transaction->amount,
+            'formula'         => $transaction->formula,
             'description'     => $transaction->description,
             'pic'             => $transaction->pic,
             'is_marked'       => $transaction->is_marked,
@@ -123,6 +126,7 @@ class CashTransactionController extends Controller
             'cash_account_id' => 'sometimes|exists:cash_accounts,id',
             'type'            => 'sometimes|in:in,out',
             'amount'          => 'sometimes|numeric|min:0.01',
+            'formula'         => 'nullable|string|max:500',
             'description'     => 'nullable|string',
             'pic'             => 'nullable|string|max:100',
             'is_marked'       => 'sometimes|boolean',
@@ -136,6 +140,7 @@ class CashTransactionController extends Controller
             'cash_account_id' => $cashTransaction->cash_account_id,
             'type'            => $cashTransaction->type,
             'amount'          => $cashTransaction->amount,
+            'formula'         => $cashTransaction->formula,
             'description'     => $cashTransaction->description,
             'pic'             => $cashTransaction->pic,
             'is_marked'       => $cashTransaction->is_marked,
@@ -197,5 +202,34 @@ class CashTransactionController extends Controller
             'overall_out' => $overallOut,
             'overall_balance' => $overallIn - $overallOut,
         ]);
+    }
+
+    public function bulkAction(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'exists:cash_transactions,id',
+            'action' => 'required|in:mark,unmark,delete',
+        ]);
+
+        $ids = $validated['ids'];
+        $action = $validated['action'];
+
+        if ($action === 'delete') {
+            CashTransaction::whereIn('id', $ids)->delete();
+            return response()->json(['message' => 'Transaksi berhasil dihapus.']);
+        }
+
+        if ($action === 'mark') {
+            CashTransaction::whereIn('id', $ids)->update(['is_marked' => true]);
+            return response()->json(['message' => 'Transaksi berhasil ditandai.']);
+        }
+
+        if ($action === 'unmark') {
+            CashTransaction::whereIn('id', $ids)->update(['is_marked' => false]);
+            return response()->json(['message' => 'Tanda transaksi berhasil dihapus.']);
+        }
+
+        return response()->json(['message' => 'Aksi tidak valid.'], 400);
     }
 }

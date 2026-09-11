@@ -68,6 +68,13 @@ export const useAppStore = defineStore('app', {
                 cancelText: '',
                 type
             }
+            if (type === 'success') {
+                setTimeout(() => {
+                    if (this.confirmModal.show && this.confirmModal.type === 'success') {
+                        this.confirmModal.show = false
+                    }
+                }, 700)
+            }
         },
         closeConfirmModal(confirmed) {
             const { onConfirm, onCancel } = this.confirmModal

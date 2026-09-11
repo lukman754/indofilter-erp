@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="id">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Minimal PO Card</title>
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                padding: 32px;
+                background: #f6f8fb;
+                font-family:
+                    Inter,
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Arial,
+                    sans-serif;
+                color: #27364b;
+            }
+            .card {
+                width: min(100%, 460px);
+                margin: auto;
+                background: #fff;
+                border: 1px solid #e8edf3;
+                border-radius: 14px;
+                overflow: hidden;
+                box-shadow: 0 4px 18px rgba(24, 42, 70, 0.045);
+            }
+            .main {
+                padding: 19px 20px 18px;
+            }
+            .header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 14px;
+            }
+            .po {
+                margin: 0;
+                font-size: 14px;
+                font-weight: 650;
+                line-height: 1.35;
+                color: #172235;
+                letter-spacing: -0.01em;
+            }
+            .company {
+                margin-top: 4px;
+                font-size: 12.5px;
+                color: #2774e8;
+            }
+            .status {
+                flex: none;
+                padding: 4px 9px;
+                border: 1px solid #8ce4bd;
+                border-radius: 7px;
+                background: #f5fffa;
+                color: #09885a;
+                font-size: 11.5px;
+                font-weight: 600;
+            }
+            .section {
+                margin-top: 18px;
+            }
+            .label {
+                margin-bottom: 7px;
+                color: #94a3b8;
+                font-size: 10.5px;
+                font-weight: 600;
+                letter-spacing: 0.08em;
+            }
+            .items {
+                margin: 0;
+                padding: 0;
+                list-style: none;
+            }
+            .items li {
+                position: relative;
+                padding-left: 13px;
+                margin: 4px 0;
+                font-size: 12.5px;
+                line-height: 1.4;
+                color: #485a72;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .items li:before {
+                content: "";
+                position: absolute;
+                left: 0;
+                top: 7px;
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: #4b94f6;
+            }
+            .contact-name {
+                font-size: 12.5px;
+                color: #34445b;
+            }
+            .contact-phone {
+                margin-top: 2px;
+                font-size: 12.5px;
+                color: #74859b;
+            }
+            .total-row {
+                display: flex;
+                align-items: end;
+                justify-content: space-between;
+                margin-top: 18px;
+                padding-top: 14px;
+                border-top: 1px solid #edf1f5;
+            }
+            .amount {
+                font-size: 18px;
+                line-height: 1.2;
+                font-weight: 700;
+                color: #1769ed;
+                letter-spacing: -0.02em;
+            }
+            .date {
+                font-size: 11.5px;
+                color: #91a0b4;
+            }
+            .refs {
+                margin-top: 13px;
+                padding-top: 12px;
+                border-top: 1px solid #edf1f5;
+            }
+            .ref {
+                margin: 5px 0;
+                font-size: 11.5px;
+                color: #2774e8;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .actions {
+                display: flex;
+                align-items: center;
+                min-height: 43px;
+                padding: 0 18px;
+                border-top: 1px solid #edf1f5;
+                background: #fcfdff;
+            }
+            .convert {
+                margin-right: auto;
+                color: #d66520;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            .action {
+                width: 34px;
+                height: 43px;
+                display: grid;
+                place-items: center;
+                color: #5d9af4;
+                cursor: pointer;
+            }
+            .action:hover {
+                background: #f1f6fd;
+            }
+            .action svg {
+                width: 16px;
+                height: 16px;
+                fill: none;
+                stroke: currentColor;
+                stroke-width: 1.7;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+            .delete {
+                color: #f05b70;
+            }
+        </style>
+    </head>
+    <body>
+        <article class="card">
+            <div class="main">
+                <header class="header">
+                    <div>
+                        <h1 class="po">1028-AF-VIII-DS-AIP-HOUSING-2026</h1>
+                        <div class="company">PT. Arsindo Integrasi Pompa</div>
+                    </div>
+                    <span class="status">Confirmed</span>
+                </header>
+
+                <section class="section">
+                    <div class="label">ITEMS</div>
+                    <ul class="items">
+                        <li>
+                            Housing BFL-2 RYNN Single bag size 7×32 inch, tutup
+                            clamp, ...
+                        </li>
+                        <li>Filter bag Polyester ( PESG ) 1 mic</li>
+                        <li>Filter bag Polyester ( PESG ) 10 mic</li>
+                        <li>Filter bag Polyester ( PESG ) 25 mic</li>
+                    </ul>
+                </section>
+
+                <section class="section">
+                    <div class="label">CONTACT</div>
+                    <div class="contact-name">Bpk Jafar Shodiq</div>
+                    <div class="contact-phone">0822-8955-0248</div>
+                </section>
+
+                <div class="total-row">
+                    <div class="amount">Rp 10.822.500</div>
+                    <div class="date">13 Agu 2026</div>
+                </div>
+
+                <div class="refs">
+                    <div class="ref">
+                        Ref: 1032-AF-VIII-INV-AIP-HOUSING-2026
+                    </div>
+                    <div class="ref">PO: PO-P2990-IAF-260805-R00</div>
+                </div>
+            </div>
+
+            <footer class="actions">
+                <div class="convert">→ Convert</div>
+
+                <div class="action" title="View">
+                    <svg viewBox="0 0 24 24">
+                        <path
+                            d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5z"
+                        />
+                        <circle cx="12" cy="12" r="2.5" />
+                    </svg>
+                </div>
+
+                <div class="action" title="Edit">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" />
+                        <path d="M14.5 7.5l2 2" />
+                    </svg>
+                </div>
+
+                <div class="action" title="Document">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M7 3h7l4 4v14H7z" />
+                        <path d="M14 3v5h4" />
+                        <path d="M12 11v6" />
+                        <path d="M9.5 14.5L12 17l2.5-2.5" />
+                    </svg>
+                </div>
+
+                <div class="action delete" title="Delete">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M5 7h14" />
+                        <path d="M9 7V4h6v3" />
+                        <path d="M7 7l1 14h8l1-14" />
+                        <path d="M10 11v6M14 11v6" />
+                    </svg>
+                </div>
+            </footer>
+        </article>
+    </body>
+</html>

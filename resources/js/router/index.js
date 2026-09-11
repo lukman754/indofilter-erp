@@ -2,15 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
     {
-        path: '/login',
-        name: 'login',
-        component: () => import('../pages/Login.vue'),
-        meta: { guest: true },
-    },
-    {
         path: '/',
         component: () => import('../layouts/MainLayout.vue'),
-        meta: { requiresAuth: true },
         children: [
             {
                 path: '',
@@ -72,14 +65,14 @@ const routes = [
                 component: () => import('../pages/settings/GoogleDrive.vue'),
             },
             {
-                path: 'kas',
-                name: 'kas',
-                component: () => import('../pages/kas/Index.vue'),
+                path: 'users',
+                name: 'users',
+                component: () => import('../pages/users/Index.vue'),
             },
             {
-                path: 'kas/summary',
-                name: 'kas.summary',
-                component: () => import('../pages/kas/Summary.vue'),
+                path: 'reports',
+                name: 'reports',
+                component: () => import('../pages/reports/Report.vue'),
             },
         ],
     },
@@ -88,17 +81,6 @@ const routes = [
 const router = createRouter({
     history: createWebHistory(),
     routes,
-})
-
-router.beforeEach((to, from, next) => {
-    const token = localStorage.getItem('token')
-    if (to.meta.requiresAuth && !token) {
-        next('/login')
-    } else if (to.meta.guest && token) {
-        next('/dashboard')
-    } else {
-        next()
-    }
 })
 
 export default router

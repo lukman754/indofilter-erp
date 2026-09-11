@@ -10,11 +10,6 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`
-    }
-    
     // Auto-inject selected company ID on GET queries
     const activeCompanyId = localStorage.getItem('active_company_id')
     if (activeCompanyId) {
@@ -32,19 +27,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response && error.response.status === 401) {
-            localStorage.removeItem('token')
-            window.location.href = '/login'
-        }
         return Promise.reject(error)
     }
 )
-
-export const auth = {
-    login: (email, password) => api.post('/login', { email, password }),
-    logout: () => api.post('/logout'),
-    getUser: () => api.get('/user'),
-}
 
 export const companies = {
     list: () => api.get('/companies'),
@@ -93,36 +78,40 @@ export const documents = {
         }
     }),
     downloadPo: (id) => api.get(`/documents/${id}/download-po`, { responseType: 'blob' }),
+    uploadSupporting: (id, formData) => api.post(`/documents/${id}/upload-supporting`, formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data'
+        }
+    }),
+    deleteSupporting: (id, filename) => api.post(`/documents/${id}/delete-supporting`, { filename }),
+    downloadSupporting: (id, filename) => api.get(`/documents/${id}/download-supporting/${filename}`, { responseType: 'blob' }),
 }
 
 export const dashboard = {
-    stats: () => api.get('/dashboard/stats'),
+    stats: (params) => api.get('/dashboard/stats', { params }),
+}
+
+export const reports = {
+    list: (params) => api.get('/reports', { params }),
+    stats: (params) => api.get('/reports/stats', { params }),
 }
 
 export const settings = {
     getGoogleDrive: () => api.get('/settings'),
     updateGoogleDrive: (data) => api.post('/settings', data),
+    changeDriveLetter: (driveLetter) => api.post('/settings/change-drive-letter', { drive_letter: driveLetter }),
+}
+
+export const users = {
+    list: () => api.get('/users'),
+    get: (id) => api.get(`/users/${id}`),
+    create: (data) => api.post('/users', data),
+    update: (id, data) => api.put(`/users/${id}`, data),
+    delete: (id) => api.delete(`/users/${id}`),
 }
 
 export const search = {
     globalSearch: (q) => api.get('/global-search', { params: { q } }),
-}
-
-export const kas = {
-    // Accounts
-    listAccounts:   ()         => api.get('/cash-accounts'),
-    createAccount:  (data)     => api.post('/cash-accounts', data),
-    updateAccount:  (id, data) => api.put(`/cash-accounts/${id}`, data),
-    deleteAccount:  (id)       => api.delete(`/cash-accounts/${id}`),
-
-    // Transactions
-    listTransactions: (params) => api.get('/cash-transactions', { params }),
-    createTransaction: (data)  => api.post('/cash-transactions', data),
-    updateTransaction: (id, data) => api.put(`/cash-transactions/${id}`, data),
-    deleteTransaction: (id)    => api.delete(`/cash-transactions/${id}`),
-
-    // Summary
-    summary: (params)          => api.get('/cash-transactions/summary', { params }),
 }
 
 export default api

@@ -22,6 +22,7 @@ class SettingController extends Controller
             'delivery_address',
             'purchase_order',
             'po_masuk',
+            'supporting_docs',
         ];
 
         $globalFolders = [];
@@ -73,6 +74,7 @@ class SettingController extends Controller
             'delivery_address',
             'purchase_order',
             'po_masuk',
+            'supporting_docs',
         ];
 
         if ($request->has('global_folders')) {
@@ -92,5 +94,53 @@ class SettingController extends Controller
         }
 
         return response()->json(['message' => 'Settings updated successfully.']);
+    }
+
+    public function changeDriveLetter(Request $request): JsonResponse
+    {
+        $request->validate([
+            'drive_letter' => 'required|string|alpha|size:1',
+        ]);
+
+        $newDrive = strtoupper($request->drive_letter);
+        $settings = Setting::all();
+        $updatedCount = 0;
+
+        foreach ($settings as $setting) {
+            $value = $setting->value;
+            if ($value && preg_match('#^([a-zA-Z]):([/\\\\].*)$#', $value, $matches)) {
+                $newValue = $newDrive . ':' . $matches[2];
+                if ($value !== $newValue) {
+                    $setting->value = $newValue;
+                    $setting->save();
+                    $updatedCount++;
+                }
+            }
+        }
+
+        $this->updateEnvDriveLetter($newDrive);
+
+        return response()->json([
+            'message' => "Huruf drive berhasil diubah menjadi {$newDrive} pada {$updatedCount} lokasi pengaturan dan file konfigurasi .env."
+        ]);
+    }
+
+    private function updateEnvDriveLetter(string $newDrive): void
+    {
+        $envPath = base_path('.env');
+        if (!file_exists($envPath)) {
+            return;
+        }
+
+        $envContent = file_get_contents($envPath);
+        
+        $patterns = [
+            '#^(DB_DATABASE=["\']?)[a-zA-Z](:[/\\][^"\']*)(["\']?)$#m' => '${1}' . $newDrive . '${2}${3}',
+            '#^(DOCUMENTS_STORAGE_PATH=["\']?)[a-zA-Z](:[/\\][^"\']*)(["\']?)$#m' => '${1}' . $newDrive . '${2}${3}',
+        ];
+
+        $newContent = preg_replace(array_keys($patterns), array_values($patterns), $envContent);
+        
+        file_put_contents($envPath, $newContent);
     }
 }

@@ -41,7 +41,7 @@ class DocumentExportTest extends TestCase
             'document_number' => 'QUO-001',
             'status' => 'draft',
         ]);
-        
+
         $document->load(['company', 'partner']);
 
         // 4. Instantiate DocumentController
@@ -58,7 +58,7 @@ class DocumentExportTest extends TestCase
         $this->assertFileExists(base_path('templates/ifs_quotation.docx'));
         $this->assertNotNull($templateProcessor);
     }
-    
+
     public function test_fill_template_uses_company_alias_prefix_template_for_af(): void
     {
         // 1. Create a Company with alias "AF"
@@ -85,7 +85,7 @@ class DocumentExportTest extends TestCase
             'document_number' => 'INV-001',
             'status' => 'draft',
         ]);
-        
+
         $document->load(['company', 'partner']);
 
         // 4. Instantiate DocumentController
@@ -212,11 +212,11 @@ class DocumentExportTest extends TestCase
             $templateProcessor = $method->invoke($controller, $document);
 
             $this->assertNotNull($templateProcessor);
-            
+
             // Save to temporary file and inspect XML
             $tempFile = tempnam(sys_get_temp_dir(), 'docx');
             $templateProcessor->saveAs($tempFile);
-            
+
             $zip = new \ZipArchive();
             $this->assertTrue($zip->open($tempFile));
             $xml = $zip->getFromName('word/document.xml');
@@ -291,11 +291,11 @@ class DocumentExportTest extends TestCase
             $templateProcessor = $method->invoke($controller, $document);
 
             $this->assertNotNull($templateProcessor);
-            
+
             // Save to temporary file and inspect XML
             $tempFile = tempnam(sys_get_temp_dir(), 'docx');
             $templateProcessor->saveAs($tempFile);
-            
+
             $zip = new \ZipArchive();
             $this->assertTrue($zip->open($tempFile));
             $xml = $zip->getFromName('word/document.xml');
@@ -365,10 +365,10 @@ class DocumentExportTest extends TestCase
         $templateProcessor = $method->invoke($controller, $document);
 
         $this->assertNotNull($templateProcessor);
-        
+
         $tempFile = tempnam(sys_get_temp_dir(), 'docx');
         $templateProcessor->saveAs($tempFile);
-        
+
         $zip = new \ZipArchive();
         $this->assertTrue($zip->open($tempFile));
         $xml = $zip->getFromName('word/document.xml');
@@ -384,7 +384,7 @@ class DocumentExportTest extends TestCase
         // 1. Create a temporary folder and dummy image file
         $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'po_masuk_test_' . uniqid();
         mkdir($tempDir);
-        
+
         $dummyImagePath = $tempDir . DIRECTORY_SEPARATOR . 'PO-12345.png';
         copy(base_path('resources/logo_placeholder.png'), $dummyImagePath);
 
@@ -432,14 +432,14 @@ class DocumentExportTest extends TestCase
         $templateProcessor = $method->invoke($controller, $document);
 
         $this->assertNotNull($templateProcessor);
-        
+
         $tempFile = tempnam(sys_get_temp_dir(), 'docx');
         $templateProcessor->saveAs($tempFile);
-        
+
         // 6. Inspect ZIP archive to ensure the image is inside word/media/
         $zip = new \ZipArchive();
         $this->assertTrue($zip->open($tempFile));
-        
+
         $hasImage = false;
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $name = $zip->getNameIndex($i);
@@ -448,7 +448,7 @@ class DocumentExportTest extends TestCase
                 break;
             }
         }
-        
+
         $zip->close();
         unlink($tempFile);
         unlink($dummyImagePath);
@@ -514,7 +514,7 @@ class DocumentExportTest extends TestCase
 
         $uploadedFilename = $response->json('customer_po_file');
         $this->assertNotEmpty($uploadedFilename);
-        
+
         $document->refresh();
         $this->assertEquals($uploadedFilename, $document->customer_po_file);
 
@@ -602,5 +602,207 @@ class DocumentExportTest extends TestCase
         } finally {
             @unlink(base_path('templates/test_delivery_slip.docx'));
         }
+    }
+
+    public function test_delivery_address_template_is_23cm_by_11cm(): void
+    {
+        $templatePath = base_path('templates/delivery_address.docx');
+        $this->assertFileExists($templatePath);
+
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($templatePath));
+        $xml = $zip->getFromName('word/document.xml');
+        $zip->close();
+
+        $this->assertNotFalse($xml);
+        $this->assertStringContainsString('w:pgSz', $xml);
+        $this->assertMatchesRegularExpression('/w:w="13039(?:\.\d+)?"/', $xml);
+        $this->assertMatchesRegularExpression('/w:h="6236(?:\.\d+)?"/', $xml);
+    }
+
+    public function test_partner_phone_formatting_slash(): void
+    {
+        $company = Company::create([
+            'name' => 'PT. Test Company',
+            'alias' => 'TC',
+            'is_active' => true,
+        ]);
+
+        $partner = Partner::create([
+            'company_id' => $company->id,
+            'type' => 'customer',
+            'name' => 'Test Partner',
+            'phone' => '0895292904210',
+            'contact_person' => 'Lukman',
+            'is_active' => true,
+        ]);
+
+        // 1. Non-delivery_address document (e.g. quotation) should format with slash
+        $quotation = Document::create([
+            'company_id' => $company->id,
+            'partner_id' => $partner->id,
+            'type' => 'quotation',
+            'date' => now(),
+            'document_number' => 'QUO-TEST-123',
+            'status' => 'draft',
+            'recipient_pic' => 'Lukman',
+            'recipient_phone' => '0895292904210',
+        ]);
+
+        $controller = new DocumentController($this->createMock(DocumentNumberService::class));
+        $method = new ReflectionMethod(DocumentController::class, 'fillTemplate');
+        $method->setAccessible(true);
+
+        $templateProcessor = $method->invoke($controller, $quotation);
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'docx');
+        $templateProcessor->saveAs($tempFile);
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($tempFile));
+        $xml = $zip->getFromName('word/document.xml');
+        $zip->close();
+        unlink($tempFile);
+
+        // Check if XML contains formatted phone
+        $this->assertStringContainsString('Lukman / 0895292904210', $xml);
+
+        // 2. Delivery_address document should format without slash
+        $deliveryAddress = Document::create([
+            'company_id' => $company->id,
+            'partner_id' => $partner->id,
+            'type' => 'delivery_address',
+            'date' => now(),
+            'document_number' => 'DA-TEST-123',
+            'status' => 'draft',
+            'recipient_pic' => 'Lukman',
+            'recipient_phone' => '0895292904210',
+        ]);
+
+        $templateProcessor2 = $method->invoke($controller, $deliveryAddress);
+
+        $tempFile2 = tempnam(sys_get_temp_dir(), 'docx');
+        $templateProcessor2->saveAs($tempFile2);
+        $zip2 = new \ZipArchive();
+        $this->assertTrue($zip2->open($tempFile2));
+        $xml2 = $zip2->getFromName('word/document.xml');
+        $zip2->close();
+        unlink($tempFile2);
+
+        // Should not have the combined slash, only the phone number
+        $this->assertStringNotContainsString('Lukman / 0895292904210', $xml2);
+        $this->assertStringContainsString('0895292904210', $xml2);
+
+        // 3. Only PIC is present (phone is empty)
+        $partnerNoPhone = Partner::create([
+            'company_id' => $company->id,
+            'type' => 'customer',
+            'name' => 'Test Partner No Phone',
+            'phone' => null,
+            'contact_person' => 'Lukman',
+            'is_active' => true,
+        ]);
+        $onlyPicDoc = Document::create([
+            'company_id' => $company->id,
+            'partner_id' => $partnerNoPhone->id,
+            'type' => 'quotation',
+            'date' => now(),
+            'document_number' => 'QUO-TEST-PIC',
+            'status' => 'draft',
+            'recipient_pic' => 'Lukman',
+            'recipient_phone' => '',
+        ]);
+        $templateProcessor3 = $method->invoke($controller, $onlyPicDoc);
+        $tempFile3 = tempnam(sys_get_temp_dir(), 'docx');
+        $templateProcessor3->saveAs($tempFile3);
+        $zip3 = new \ZipArchive();
+        $this->assertTrue($zip3->open($tempFile3));
+        $xml3 = $zip3->getFromName('word/document.xml');
+        $zip3->close();
+        unlink($tempFile3);
+
+        $this->assertStringNotContainsString('Lukman /', $xml3);
+        $this->assertStringContainsString('Lukman', $xml3);
+
+        // 4. Only Phone is present (PIC is empty)
+        $partnerNoPic = Partner::create([
+            'company_id' => $company->id,
+            'type' => 'customer',
+            'name' => 'Test Partner No PIC',
+            'phone' => '0895292904210',
+            'contact_person' => null,
+            'is_active' => true,
+        ]);
+        $onlyPhoneDoc = Document::create([
+            'company_id' => $company->id,
+            'partner_id' => $partnerNoPic->id,
+            'type' => 'quotation',
+            'date' => now(),
+            'document_number' => 'QUO-TEST-PHONE',
+            'status' => 'draft',
+            'recipient_pic' => '',
+            'recipient_phone' => '0895292904210',
+        ]);
+        $templateProcessor4 = $method->invoke($controller, $onlyPhoneDoc);
+        $tempFile4 = tempnam(sys_get_temp_dir(), 'docx');
+        $templateProcessor4->saveAs($tempFile4);
+        $zip4 = new \ZipArchive();
+        $this->assertTrue($zip4->open($tempFile4));
+        $xml4 = $zip4->getFromName('word/document.xml');
+        $zip4->close();
+        unlink($tempFile4);
+
+        $this->assertStringNotContainsString('/ 0895292904210', $xml4);
+        $this->assertStringContainsString('0895292904210', $xml4);
+    }
+
+    public function test_ppn_row_not_deleted_when_is_ppn_false(): void
+    {
+        $company = Company::create([
+            'name' => 'PT. Test Company',
+            'alias' => 'TC',
+            'is_active' => true,
+        ]);
+
+        $partner = Partner::create([
+            'company_id' => $company->id,
+            'type' => 'customer',
+            'name' => 'Test Partner',
+            'is_active' => true,
+        ]);
+
+        // Create a document with is_ppn = false
+        $document = Document::create([
+            'company_id' => $company->id,
+            'partner_id' => $partner->id,
+            'type' => 'invoice',
+            'date' => now(),
+            'document_number' => 'INV-PPN-FALSE',
+            'status' => 'draft',
+            'payment_type' => 'full',
+            'subtotal' => 1000000,
+            'tax' => 110000,
+            'discount' => 0,
+            'grand_total' => 1110000,
+            'is_ppn' => false,
+        ]);
+
+        $controller = new DocumentController($this->createMock(DocumentNumberService::class));
+        $method = new ReflectionMethod(DocumentController::class, 'fillTemplate');
+        $method->setAccessible(true);
+
+        $templateProcessor = $method->invoke($controller, $document);
+        $tempFile = tempnam(sys_get_temp_dir(), 'docx');
+        $templateProcessor->saveAs($tempFile);
+
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($tempFile));
+        $xml = $zip->getFromName('word/document.xml');
+        $zip->close();
+        unlink($tempFile);
+
+        // Since is_ppn is false, the PPN row should still exist (it should contain 'PPN (11%)' in the template)
+        // but its value should be replaced with empty string (it should NOT contain 'Rp 110.000')
+        $this->assertStringContainsString('PPN (11%)', $xml);
+        $this->assertStringNotContainsString('Rp 110.000', $xml);
     }
 }

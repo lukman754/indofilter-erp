@@ -4,11 +4,11 @@
 
 Sistem ERP untuk mengelola 2 PT (PT Indofilter Utama & PT Indofilter Sukses) dengan modul:
 
-| Modul | Dokumen |
-|-------|---------|
-| Sales | Quotation → Proforma Invoice → Invoice |
-| Inventory | Delivery Slip, Delivery Address (Resi) |
-| Purchasing | Purchase Order (PO Keluar) |
+| Modul      | Dokumen                                |
+| ---------- | -------------------------------------- |
+| Sales      | Quotation → Proforma Invoice → Invoice |
+| Inventory  | Delivery Slip, Delivery Address (Resi) |
+| Purchasing | Purchase Order (PO Keluar)             |
 
 ## 2. Arsitektur Sistem
 
@@ -31,16 +31,19 @@ Sistem ERP untuk mengelola 2 PT (PT Indofilter Utama & PT Indofilter Sukses) den
 ## 3. Modul & Flow Dokumen
 
 ### Sales Flow
+
 ```
 Quotation ──(disetujui)──→ Proforma Invoice ──(pembayaran)──→ Invoice
 ```
 
 ### Inventory Flow
+
 ```
 Invoice ──→ Delivery Slip (Surat Jalan) + Delivery Address (Resi)
 ```
 
 ### Purchasing Flow
+
 ```
 Permintaan ──→ Purchase Order (PO ke Vendor)
 ```
@@ -72,18 +75,19 @@ products: id, company_id, code, name, uom, price, description
 
 ## 5. Format Nomor Dokumen
 
-| Dokumen | Format |
-|----------|--------|
-| Quotation | QTN-{MM}/{YYYY}-{0001} |
-| Proforma Invoice | PFI-{MM}/{YYYY}-{0001} |
-| Invoice | INV-{MM}/{YYYY}-{0001} |
-| Delivery Slip | SJ-{MM}/{YYYY}-{0001} |
+| Dokumen          | Format                  |
+| ---------------- | ----------------------- |
+| Quotation        | QTN-{MM}/{YYYY}-{0001}  |
+| Proforma Invoice | PFI-{MM}/{YYYY}-{0001}  |
+| Invoice          | INV-{MM}/{YYYY}-{0001}  |
+| Delivery Slip    | SJ-{MM}/{YYYY}-{0001}   |
 | Delivery Address | RESI-{MM}/{YYYY}-{0001} |
-| Purchase Order | PO-{MM}/{YYYY}-{0001} |
+| Purchase Order   | PO-{MM}/{YYYY}-{0001}   |
 
 ## 6. UI Design (Odoo-style)
 
 ### Color Palette — Indofilter Blue
+
 ```
 Primary:   #1A56DB (Biru Indofilter)
 Secondary: #0E3B8A (Biru Tua)
@@ -95,6 +99,7 @@ Danger:    #EF4444
 ```
 
 ### Layout — Odoo Kanban / List View
+
 ```
 ┌────────────────────────────────────────────┐
 │  [LOGO] Indofilter ERP        [2 PT] [User]│ ← Navbar
@@ -119,6 +124,7 @@ Danger:    #EF4444
 Setiap template menggunakan **PHPWord Template Processor** dengan placeholder `{VARIABLE}`.
 
 ### Daftar Placeholder Umum
+
 ```
 {company_name}       — Nama PT
 {company_logo}       — Logo perusahaan
@@ -139,6 +145,7 @@ Setiap template menggunakan **PHPWord Template Processor** dengan placeholder `{
 ```
 
 ### Placeholder Tabel Item (Block Clone)
+
 ```
 {items}
 {product_name}  {description}  {qty}  {uom}  {unit_price}  {total}
@@ -151,25 +158,25 @@ Setiap template menggunakan **PHPWord Template Processor** dengan placeholder `{
 
 Setiap dokumen di atas dapat dikustomisasi per-perusahaan dengan menambahkan prefiks alias perusahaan yang di-lowercase (contoh: `ifs_quotation.docx`, `af_quotation.docx`). Jika berkas spesifik perusahaan tidak ditemukan, sistem akan otomatis menggunakan template default.
 
-| File | Deskripsi |
-|------|-----------|
-| `templates/quotation.docx` | Surat Penawaran Harga (Default) |
-| `templates/proforma_invoice.docx` | Proforma Invoice (PI) (Default) |
-| `templates/invoice.docx` | Invoice / Faktur Pajak (Default) |
-| `templates/delivery_slip.docx` | Surat Jalan (Default) |
-| `templates/delivery_address.docx` | Alamat Pengiriman (seperti Resi) (Default) |
-| `templates/purchase_order.docx` | Purchase Order (PO ke Vendor) (Default) |
+| File                              | Deskripsi                               |
+| --------------------------------- | --------------------------------------- |
+| `templates/quotation.docx`        | Surat Penawaran Harga (Default)         |
+| `templates/proforma_invoice.docx` | Proforma Invoice (PI) (Default)         |
+| `templates/invoice.docx`          | Invoice / Faktur Pajak (Default)        |
+| `templates/delivery_slip.docx`    | Surat Jalan (Default)                   |
+| `templates/delivery_address.docx` | Alamat Surat (seperti Resi) (Default)   |
+| `templates/purchase_order.docx`   | Purchase Order (PO ke Vendor) (Default) |
 
 ## 9. Tech Stack
 
-| Layer | Teknologi |
-|-------|-----------|
-| Backend | Laravel 11 + PHP 8.2 |
-| Frontend | Vue.js 3 + Vite + Tailwind CSS |
-| Database | MySQL 8 (via Laragon) |
-| DOCX Engine | PHPWord |
-| Auth | Laravel Sanctum |
-| Multi-company | Database column `company_id` |
+| Layer         | Teknologi                      |
+| ------------- | ------------------------------ |
+| Backend       | Laravel 11 + PHP 8.2           |
+| Frontend      | Vue.js 3 + Vite + Tailwind CSS |
+| Database      | MySQL 8 (via Laragon)          |
+| DOCX Engine   | PHPWord                        |
+| Auth          | Laravel Sanctum                |
+| Multi-company | Database column `company_id`   |
 
 ## 10. Milestone
 
@@ -184,4 +191,4 @@ Setiap dokumen di atas dapat dikustomisasi per-perusahaan dengan menambahkan pre
 
 ---
 
-*Dibuat: Juni 2026 — Indofilter ERP v1.0*
+_Dibuat: Juni 2026 — Indofilter ERP v1.0_
