@@ -4,6 +4,14 @@ Indofilter ERP adalah aplikasi ERP internal berbasis web untuk membantu perusaha
 
 Aplikasi ini dirancang untuk kebutuhan operasional perusahaan dagang dan manufaktur skala kecil sampai menengah, terutama proses administrasi penjualan, pembelian, inventaris, serta pengelolaan dokumen bisnis.
 
+## Preview
+### Manajemen Dokumen
+<img width="1733" height="907" alt="ChatGPT Image Sep 22, 2026, 06_32_29 PM" src="https://github.com/user-attachments/assets/b47d515c-561e-4b60-89da-6869507fa135" />
+
+### Preview Detail Dokumen
+<img width="1341" height="980" alt="preview_dokumen_sensored" src="https://github.com/user-attachments/assets/e95cc96a-5b49-4807-a4c1-62067c3d4c1f" />
+
+
 ## Ringkasan Fitur
 
 ### Dashboard
@@ -300,6 +308,3 @@ Fokus aplikasi saat ini adalah administrasi dokumen dan master data untuk operas
 
 Pengujian otomatis perlu ditambahkan kembali sebelum aplikasi digunakan dalam proses bisnis kritis atau deployment production.
 
-## Lisensi
-
-Lisensi proyek belum ditentukan. Tentukan lisensi yang sesuai sebelum repository didistribusikan secara publik.
